@@ -174,7 +174,20 @@ describe('the service worker and share pages', () => {
       await new Promise((r) => setTimeout(r, 0))
       return { intercepted: Boolean(responded) }
     }
-    return { navigate, put, fetch }
+
+    async function load(path, from) {
+      let responded = null
+      handlers.fetch({
+        request: { method: 'GET', mode: 'cors', url: new URL(path, scope).href, referrer: new URL(from, scope).href },
+        respondWith: (p) => {
+          responded = p
+        },
+      })
+      if (responded) await responded
+      await new Promise((r) => setTimeout(r, 0))
+      return { intercepted: Boolean(responded) }
+    }
+    return { navigate, load, put, fetch }
   }
 
   it('leaves share pages entirely to the network', async () => {
@@ -195,6 +208,15 @@ describe('the service worker and share pages', () => {
     const sw = boot()
     await sw.navigate('somewhere-else.html')
     expect(sw.put).not.toHaveBeenCalled()
+  })
+
+  it('leaves the metrics dashboard, and what it loads, to the network', async () => {
+    const sw = boot()
+    expect((await sw.navigate('metrics/')).intercepted).toBe(false)
+    expect((await sw.load('assets/metrics-abc123.js', 'metrics/')).intercepted).toBe(false)
+    expect(sw.put).not.toHaveBeenCalled()
+    // The app's own assets are still cached as before.
+    expect((await sw.load('assets/index-abc123.js', './')).intercepted).toBe(true)
   })
 
   it('works under a root scope too (local preview)', async () => {

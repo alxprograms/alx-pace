@@ -1,0 +1,85 @@
+/*
+  The learner-usage dashboard (metrics/index.html): its own stylesheet, so
+  none of the app's base styles reach it. The app's Poppins, bundled the same
+  way, so the page fetches nothing from a font service.
+*/
+@config "../../../tailwind.metrics.config.js";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../../assets/fonts/poppins-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../../assets/fonts/poppins-latin-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../../assets/fonts/poppins-latin-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../../assets/fonts/poppins-latin-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@layer base {
+  html {
+    background: #020b33;
+    color-scheme: dark;
+  }
+  body {
+    @apply min-h-screen font-sans text-[#E8ECFA] antialiased;
+    background:
+      radial-gradient(60rem 40rem at -10% -10%, rgba(4, 82, 240, 0.35), transparent 60%),
+      radial-gradient(50rem 30rem at 110% 110%, rgba(196, 232, 120, 0.12), transparent 60%),
+      #020b33;
+  }
+  ::selection {
+    background: #c4e878;
+    color: #03134f;
+  }
+}
+
+@layer components {
+  /* A card: a pane of the night sky, edged in a hairline. */
+  .pulse-card {
+    @apply relative rounded-3xl border border-white/[0.08] bg-[#0B1645]/80 p-5 shadow-[0_1px_0_rgba(255,255,255,0.06)_inset] backdrop-blur sm:p-6;
+  }
+  .pulse-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-[#A9B3D6];
+  }
+  .pulse-button {
+    @apply inline-flex min-h-[44px] items-center justify-center rounded-full px-4 text-sm font-semibold text-[#E8ECFA] outline-none transition-colors hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-[#C4E878];
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

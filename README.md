@@ -113,16 +113,61 @@ they have set a start date. Two delivery modes, best available wins:
 
 ---
 
-## 📊 Anonymous usage stats (dormant until configured)
+## 📊 Anonymous usage stats and the learner dashboard
 
-[`src/lib/analytics.js`](src/lib/analytics.js) can report aggregate, cookieless
-tallies to a free [GoatCounter](https://www.goatcounter.com) site: app opens,
-installed-vs-browser, and a once-per-device-per-day program / week-number /
-pacing-status event (`program-gd`, `gd-week-5`, `status-behind`; DA keeps its
-original bare `week-N` names) — never anything identifying a learner. Do Not Track and
-Global Privacy Control are honored, and no third-party script runs (plain GET
-beacons). Off by default: set `GOATCOUNTER_SITE` in
-[`src/lib/analyticsConfig.js`](src/lib/analyticsConfig.js) to activate.
+[`src/lib/analytics.js`](src/lib/analytics.js) reports aggregate, cookieless
+tallies to the free [GoatCounter](https://www.goatcounter.com) site `alxpace`
+(set in [`src/lib/analyticsConfig.js`](src/lib/analyticsConfig.js)): app opens,
+installed-vs-browser, and once per device per day the learner's program, week,
+pace, and week-with-pace (`program-da`, `week-4`, `status-behind`,
+`week-4-behind`; other programs prefix their weeks, `gd-week-5-behind`). Never
+anything identifying a learner. Do Not Track and Global Privacy Control are
+honored, and no third-party script runs (plain GET beacons).
+
+**The dashboard** at
+[alxprograms.github.io/alx-pace/metrics/](https://alxprograms.github.io/alx-pace/metrics/)
+turns those counts into charts: active learners a day, the pace mix, and where
+in the course learners are, for the last 7, 30 or 90 days or everything, with
+what each chart says written beside it. The numbers are public, like the repo.
+
+**How it stays current, with nobody updating it:**
+
+```
+GoatCounter ──API──▶ .github/workflows/metrics.yml (daily, 05:23 UTC)
+                       ├─ scripts/metrics/collect.mjs → metrics.json on the `metrics` branch
+                       └─ Mondays: scripts/metrics/digest.mjs → Slack
+metrics.json ──raw.githubusercontent.com──▶ /metrics/ (the dashboard page)
+```
+
+The numbers live on their own `metrics` branch, never `main`: a commit to
+`main` redeploys the app and tags a rollback point, and a daily one would bury
+the real ones. The dashboard reads the file straight from GitHub, so new
+numbers show without a deploy.
+
+**Setting it up (repository owner, once):**
+
+1. In GoatCounter, *Settings → API*: create a key with only **Read statistics**.
+   Add it as the Actions secret `GOATCOUNTER_API_KEY` (repo *Settings → Secrets
+   and variables → Actions*).
+2. In Slack, create an app with an **Incoming Webhook** for the channel the
+   digest goes to. Add its URL as the secret `SLACK_WEBHOOK_URL`.
+3. *Actions → Learner metrics → Run workflow* (tick *Post the weekly Slack
+   digest now* to see the first one straight away).
+
+Without the key the job collects nothing and says so; without the webhook it
+prints the digest in the log. Neither turns the run red.
+
+**Working on it locally:**
+
+```bash
+mkdir -p metrics-data                                         # git-ignored, as in the workflow
+node scripts/metrics/sample.mjs > metrics-data/metrics.json   # made-up data
+npm run dev                          # then open /metrics/?data=/metrics-data/metrics.json
+node scripts/metrics/digest.mjs --dir metrics-data --dry-run  # the Slack message, printed
+```
+
+`?data=` works only under `npm run dev`, so the public page can't be pointed at
+made-up numbers by a link.
 
 ---
 
@@ -336,8 +381,15 @@ src/
 │                            # CurrentFocusCard, GradedMilestonesAlert, ProgressBar,
 │                            # WeekAccordion, CountdownState, GraduationState,
 │                            # StartDatePrompt, Footer
+├── metrics/                 # the learner dashboard and the job that feeds it
+│   ├── model.js             #   counts → days → summaries, the Monday digest (pure)
+│   ├── goatcounter.js       #   GoatCounter API client (paging, rate limits)
+│   ├── slack.js             #   the digest as a Slack message
+│   └── dashboard/           #   the /metrics/ page (its own entry, styles and charts)
 ├── App.jsx                  # state machine wiring it all together
 └── main.jsx
+metrics/index.html           # the dashboard's HTML entry (a second Vite page)
+scripts/metrics/             # collect.mjs, digest.mjs, sample.mjs (run by metrics.yml)
 ```
 
 ---
