@@ -1,0 +1,296 @@
+/**
+ * Learner-usage numbers: from GoatCounter's API response to the stored file,
+ * and from the stored file to what the dashboard and the Slack digest say.
+ *
+ * Pure functions over plain data, shared by the Node collector, the weekly
+ * digest and the dashboard (see config.js on the explicit `.js` imports).
+ *
+ * WHAT THE COUNTS MEAN
+ * GoatCounter returns visitors per path per day. The app sends each pacing
+ * event at most once per device per day (src/lib/analytics.js), so a day's
+ * count of `program-da` is the number of devices that opened Data Analytics
+ * that day: "active learners". A learner on two devices counts twice; one
+ * whose browser sends Do Not Track or Global Privacy Control is not counted.
+ *
+ * THE STORED FILE (metrics.json on the `metrics` branch)
+ *   { version: 1, site, updatedAt, firstDay, lastDay,
+ *     days: { "2026-10-05": { "program-da": 12, "week-4": 3, "/": 20, ... } } }
+ * A day holds only non-zero counts; a day present with no keys is a day with
+ * nothing counted. Days are GoatCounter's, in the site's time zone.
+ */
+
+export const STATUSES = ['behind', 'on-track', 'ahead']
+export const PROGRAMS = ['da', 'cc', 'gd']
+
+/* ---------- dates: 'YYYY-MM-DD' strings, computed in UTC ---------- */
+
+const DAY_MS = 86_400_000
+const toTime = (day) => Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10))
+const fromTime = (t) => new Date(t).toISOString().slice(0, 10)
+
+export const isDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+export const addDays = (day, n) => fromTime(toTime(day) + n * DAY_MS)
+export const daysBetween = (from, to) => Math.round((toTime(to) - toTime(from)) / DAY_MS)
+export const todayUTC = (now = new Date()) => now.toISOString().slice(0, 10)
+
+/** Every day from `from` to `to`, both included. */
+export function dayRange(from, to) {
+  const out = []
+  for (let d = from; d <= to; d = addDays(d, 1)) out.push(d)
+  return out
+}
+
+/** The Monday of the ISO week holding `day`. */
+export function mondayOf(day) {
+  const weekday = new Date(toTime(day)).getUTCDay() // 0 = Sunday
+  return addDays(day, -((weekday + 6) % 7))
+}
+
+/* ---------- GoatCounter → stored days ---------- */
+
+/**
+ * The name a path is stored under. Events come back without a slash
+ * ("program-da"); the one pageview is "/". A stray leading slash on an event
+ * is dropped, as GoatCounter itself does when it stores one.
+ */
+export function pathKey(hit) {
+  const path = String(hit?.path ?? '').trim()
+  if (hit?.event) return path.replace(/^\/+/, '')
+  return path || '/'
+}
+
+/**
+ * The days of one fetch, from `/api/v0/stats/hits?group=day` pages: every day
+ * of the window, each with its non-zero counts. A day of the window that no
+ * path reports is still listed, empty: nothing was counted that day.
+ */
+export function hitsToDays(hits, from, to) {
+  const days = Object.fromEntries(dayRange(from, to).map((d) => [d, {}]))
+  for (const hit of hits ?? []) {
+    const key = pathKey(hit)
+    if (!key) continue
+    for (const stat of hit.stats ?? []) {
+      const n = Number(stat?.daily) || 0
+      if (!n || !(stat.day in days)) continue
+      days[stat.day][key] = (days[stat.day][key] ?? 0) + n
+    }
+  }
+  return days
+}
+
+/**
+ * The stored days with a fresh fetch laid over them. Each fetched day replaces
+ * the stored one whole, except the first day of the window, which a fetch
+ * starting at UTC midnight may hold only part of: it fills a gap, and never
+ * overwrites a day already stored.
+ */
+export function mergeDays(stored, fresh) {
+  const out = { ...(stored ?? {}) }
+  const freshDays = Object.keys(fresh).sort()
+  freshDays.forEach((day, i) => {
+    if (i === 0 && day in out) return
+    out[day] = { ...fresh[day] }
+  })
+  return out
+}
+
+/** The stored file, made from its days. */
+export function buildFile(days, { site, updatedAt }) {
+  const sorted = Object.keys(days).sort()
+  return {
+    version: 1,
+    site,
+    updatedAt,
+    firstDay: sorted[0] ?? null,
+    lastDay: sorted.at(-1) ?? null,
+    days: Object.fromEntries(sorted.map((d) => [d, sortKeys(days[d])])),
+  }
+}
+
+const sortKeys = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1)))
+
+/**
+ * Whether a stored file can be read: the wrong shape is treated as nothing
+ * stored, so the collector rebuilds it from COLLECT_FROM rather than merge
+ * into it, and the dashboard says it has no data rather than draw nonsense.
+ */
+export function readFile(file) {
+  if (!file || file.version !== 1 || typeof file.days !== 'object' || file.days === null) return null
+  const days = {}
+  for (const [day, counts] of Object.entries(file.days)) {
+    if (!isDay(day) || typeof counts !== 'object' || counts === null) continue
+    days[day] = {}
+    for (const [k, v] of Object.entries(counts)) {
+      const n = Number(v)
+      if (Number.isFinite(n) && n > 0) days[day][k] = n
+    }
+  }
+  return { ...file, days }
+}
+
+/* ---------- stored days → what the dashboard and digest say ---------- */
+
+/**
+ * One day's counts, read into what they mean. `program` narrows the weeks to
+ * that program's (Data Analytics' are the bare `week-N`; the others are
+ * prefixed). Statuses come from `status-*`, which carries no program; while
+ * only Data Analytics is offered, they are its learners' (see the dashboard).
+ */
+export function readDay(counts = {}, program = 'da') {
+  const prefix = program === 'da' ? '' : `${program}-`
+  const weekRe = new RegExp(`^${prefix}week-(\\d+(?:\\.\\d+)?)(?:-(${STATUSES.join('|')}))?$`)
+  const programs = Object.fromEntries(PROGRAMS.map((p) => [p, counts[`program-${p}`] ?? 0]))
+  const status = Object.fromEntries(STATUSES.map((s) => [s, counts[`status-${s}`] ?? 0]))
+  const weeks = {}
+  const weekStatus = {}
+  for (const [key, n] of Object.entries(counts)) {
+    const m = weekRe.exec(key)
+    if (!m) continue
+    const week = m[1]
+    if (m[2]) {
+      weekStatus[week] ??= { behind: 0, 'on-track': 0, ahead: 0 }
+      weekStatus[week][m[2]] += n
+    } else {
+      weeks[week] = (weeks[week] ?? 0) + n
+    }
+  }
+  return {
+    active: programs[program] ?? 0,
+    activeAll: Object.values(programs).reduce((a, b) => a + b, 0),
+    programs,
+    status,
+    weeks,
+    weekStatus,
+    opens: counts['/'] ?? 0,
+    installed: counts['open-installed'] ?? 0,
+    browser: counts['open-browser'] ?? 0,
+  }
+}
+
+/** The days from `from` to `to`, each read for `program`, zero where nothing is stored. */
+export function series(days, from, to, program = 'da') {
+  return dayRange(from, to).map((day) => ({ day, ...readDay(days[day], program) }))
+}
+
+const sum = (rows, pick) => rows.reduce((a, r) => a + pick(r), 0)
+const share = (part, whole) => (whole > 0 ? part / whole : null)
+
+/** Weeks in course order: "2" before "10", "13.5" between "13" and "14". */
+export const byWeek = (a, b) => Number(a) - Number(b)
+
+/**
+ * A stretch of days summed up: average daily active learners, learner-days,
+ * the pace mix, installed share, where learners are by week, and the same by
+ * week and pace where the combined events have been counted.
+ */
+export function summarize(rows) {
+  const n = rows.length
+  const learnerDays = sum(rows, (r) => r.active)
+  const statusTotals = Object.fromEntries(STATUSES.map((s) => [s, sum(rows, (r) => r.status[s])]))
+  const statusAll = Object.values(statusTotals).reduce((a, b) => a + b, 0)
+  const weeks = {}
+  const weekStatus = {}
+  for (const r of rows) {
+    for (const [w, c] of Object.entries(r.weeks)) weeks[w] = (weeks[w] ?? 0) + c
+    for (const [w, by] of Object.entries(r.weekStatus)) {
+      weekStatus[w] ??= { behind: 0, 'on-track': 0, ahead: 0 }
+      for (const s of STATUSES) weekStatus[w][s] += by[s]
+    }
+  }
+  const installed = sum(rows, (r) => r.installed)
+  const browser = sum(rows, (r) => r.browser)
+  const peak = rows.reduce((best, r) => (r.active > (best?.active ?? -1) ? r : best), null)
+  return {
+    days: n,
+    learnerDays,
+    avgActive: n > 0 ? learnerDays / n : 0,
+    peak: peak && peak.active > 0 ? { day: peak.day, active: peak.active } : null,
+    status: statusTotals,
+    statusShare: Object.fromEntries(STATUSES.map((s) => [s, share(statusTotals[s], statusAll)])),
+    installed,
+    browser,
+    installedShare: share(installed, installed + browser),
+    opens: sum(rows, (r) => r.opens),
+    weeks,
+    weekStatus,
+    hasWeekStatus: Object.keys(weekStatus).length > 0,
+  }
+}
+
+/**
+ * The weekly rhythm: average learners on each weekday, Monday first, with the
+ * busiest and the quietest. Null until every weekday has been seen twice (one
+ * Monday is an anecdote, not a rhythm) or when the days don't differ.
+ */
+export function weekdayPattern(rows) {
+  const totals = Array(7).fill(0)
+  const seen = Array(7).fill(0)
+  for (const r of rows) {
+    const weekday = (new Date(`${r.day}T00:00:00Z`).getUTCDay() + 6) % 7
+    totals[weekday] += r.active
+    seen[weekday] += 1
+  }
+  if (seen.some((n) => n < 2)) return null
+  const avg = totals.map((t, i) => t / seen[i])
+  const busiest = avg.indexOf(Math.max(...avg))
+  const quietest = avg.indexOf(Math.min(...avg))
+  return avg[busiest] > avg[quietest] ? { avg, busiest, quietest } : null
+}
+
+/**
+ * The course week where being behind is most common, among weeks with at
+ * least `minimum` learner-days of pace counted (fewer is a handful of people,
+ * and a share of a handful says little). Ties go to the earlier week.
+ */
+export function mostBehindWeek(weekStatus, minimum = 10) {
+  let best = null
+  for (const [week, by] of Object.entries(weekStatus).sort(([a], [b]) => byWeek(a, b))) {
+    const total = STATUSES.reduce((a, s) => a + by[s], 0)
+    if (total < minimum || by.behind === 0) continue
+    const shareBehind = by.behind / total
+    if (!best || shareBehind > best.share) best = { week, share: shareBehind }
+  }
+  return best
+}
+
+/** The trailing average of `pick` over `window` days, null until the window is full. */
+export function movingAverage(rows, pick, window = 7) {
+  return rows.map((_, i) => {
+    if (i + 1 < window) return null
+    let total = 0
+    for (let j = i + 1 - window; j <= i; j++) total += pick(rows[j])
+    return total / window
+  })
+}
+
+/** The change from `before` to `after` as a fraction (0.12 = +12%); null with nothing before. */
+export const change = (after, before) => (before > 0 ? (after - before) / before : null)
+
+/**
+ * The Monday digest: the last full Monday-to-Sunday week before `today`, and
+ * the week before it to compare with. `program` as in readDay.
+ */
+export function weeklyDigest(days, today, program = 'da') {
+  const thisMonday = mondayOf(today)
+  const from = addDays(thisMonday, -7)
+  const to = addDays(thisMonday, -1)
+  const week = summarize(series(days, from, to, program))
+  const prior = summarize(series(days, addDays(from, -7), addDays(from, -1), program))
+  const topWeeks = Object.entries(week.weeks)
+    .sort(([wa, a], [wb, b]) => b - a || byWeek(wa, wb))
+    .slice(0, 3)
+    .map(([w, learnerDays]) => ({ week: w, avg: learnerDays / 7 }))
+  return {
+    from,
+    to,
+    program,
+    avgActive: week.avgActive,
+    avgActiveChange: change(week.avgActive, prior.avgActive),
+    learnerDays: week.learnerDays,
+    peak: week.peak,
+    statusShare: week.statusShare,
+    installedShare: week.installedShare,
+    topWeeks,
+    hasData: week.learnerDays > 0 || week.opens > 0,
+  }
+}
