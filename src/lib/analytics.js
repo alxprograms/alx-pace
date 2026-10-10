@@ -49,10 +49,25 @@ export function trackAppOpen() {
 }
 
 /**
+ * The events of one daily pacing snapshot, in the order they are sent.
+ *
+ * Program, week and status each count learners on their own, so the
+ * dashboard can say how many are in Week 4 and how many are behind, but not
+ * how many in Week 4 are behind. The fourth event carries the pair
+ * (`week-4-behind`), so that question has an answer from the day it ships;
+ * the first three are unchanged, and every series already collected runs on.
+ * DA keeps its bare `week-N` names; other programs prefix theirs
+ * (`cc-week-N`, `cc-week-N-behind`).
+ */
+export function pacingEvents(paceStatus, program = 'da') {
+  const week = program === 'da' ? `week-${paceStatus.week}` : `${program}-week-${paceStatus.week}`
+  return [`program-${program}`, week, `status-${paceStatus.status}`, `${week}-${paceStatus.status}`]
+}
+
+/**
  * Aggregate pacing snapshot — at most once per device per calendar day, so
  * the dashboard reads as "daily active learners in program P / at week N /
- * status X". DA keeps its original bare `week-N` event names so existing
- * dashboards stay continuous; other programs prefix theirs (`cc-week-N`).
+ * status X / at week N with status X" (see pacingEvents).
  */
 export function trackPacingDaily(paceStatus, program = 'da') {
   if (!enabled() || !paceStatus) return
@@ -63,7 +78,5 @@ export function trackPacingDaily(paceStatus, program = 'da') {
   } catch {
     return // storage unavailable — skip rather than over-count
   }
-  send(`program-${program}`)
-  send(program === 'da' ? `week-${paceStatus.week}` : `${program}-week-${paceStatus.week}`)
-  send(`status-${paceStatus.status}`)
+  for (const event of pacingEvents(paceStatus, program)) send(event)
 }
