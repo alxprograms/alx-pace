@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-// `?inline`: the dashboard's own copies, as data URLs in its own chunk. The
-// plain imports are the app's, and sharing them would pull the app's
-// portraits into a chunk both pages load (see vite.config.js).
-import portrait1 from '../../assets/alx/banner-img1.webp?inline'
-import portrait2 from '../../assets/alx/banner-img2.webp?inline'
-import portrait3 from '../../assets/alx/banner-img3.webp?inline'
-import portrait4 from '../../assets/alx/banner-img4.webp?inline'
-import portrait5 from '../../assets/alx/banner-img5.webp?inline'
-import logo from '../../assets/alx/header-logo.svg?inline'
+import portrait1 from '../../assets/alx/banner-img1.webp'
+import portrait2 from '../../assets/alx/banner-img2.webp'
+import portrait3 from '../../assets/alx/banner-img3.webp'
+import portrait4 from '../../assets/alx/banner-img4.webp'
+import portrait5 from '../../assets/alx/banner-img5.webp'
+import logo from '../../assets/alx/header-logo.svg'
 import { APP_URL, DATA_URL } from '../config.js'
 import { addDays, byWeek, change, daysBetween, mostBehindWeek, movingAverage, readFile, series, summarize, weekdayPattern, STATUSES } from '../model.js'
 import { DailyActiveChart, Legend, MeterDial, PaceDial, PaceMixChart, Sparkline, WeeksChart } from './charts.jsx'
@@ -259,6 +256,9 @@ function Report({ file, range }) {
   const rangeText = `${fmtDay(view.from)} – ${fmtDay(view.to, { day: 'numeric', month: 'short', year: 'numeric' })}`
   const paceAll = STATUSES.reduce((a, k) => a + s.status[k], 0)
   const priorPaceAll = STATUSES.reduce((a, k) => a + prior.status[k], 0)
+  // Days with learners but no pace: from 4 Oct the old pace event was mostly
+  // refused (see readDay), and those days read as not counted.
+  const unpaced = rows.filter((r) => r.active > 0 && STATUSES.every((k) => r.status[k] === 0)).length
   const rhythm = weekdayPattern(rows)
   const topWeek = view.weeks.reduce((best, w) => (w.avg > (best?.avg ?? 0) ? w : best), null)
   const behindWeek = view.paceFrom ? mostBehindWeek(s.weekStatus) : null
@@ -323,9 +323,9 @@ function Report({ file, range }) {
         <div className="pulse-card flex flex-col">
           <p className="pulse-label">Installed app</p>
           <div className="mt-6 flex-1">
-            <MeterDial share={s.installedShare} label={`${fmtPct(s.installedShare)} of app opens from the home screen`} />
+            <MeterDial share={s.installedShare} label={`${fmtPct(s.installedShare)} of visits from the home screen`} />
           </div>
-          <p className="mt-3 text-center text-xs text-[#A9B3D6]">of app opens were from the home screen</p>
+          <p className="mt-3 text-center text-xs text-[#A9B3D6]">of visits were from the home screen</p>
           <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-white/[0.08] pt-4">
             <div>
               <dt className="text-xs text-[#A9B3D6]">Home screen</dt>
@@ -391,7 +391,10 @@ function Report({ file, range }) {
         title="Are learners keeping pace?"
         text={
           paceAll === 0 ? (
-            <p>No pace was counted in these days.</p>
+            <>
+              <p>No pace was counted in these days.</p>
+              {unpaced > 0 && <UnpacedNote />}
+            </>
           ) : (
             <>
               <p>
@@ -409,6 +412,7 @@ function Report({ file, range }) {
                   )}
                 </p>
               )}
+              {unpaced > 0 && <UnpacedNote days={unpaced} />}
               <p className="text-[#8A95BF]">A learner who is behind sees their oldest overdue lessons first when they open Pace.</p>
             </>
           )
@@ -476,6 +480,16 @@ function Report({ file, range }) {
         </ChartCard>
       </Question>
     </>
+  )
+}
+
+/** Why some days have learners but no pace. */
+function UnpacedNote({ days }) {
+  return (
+    <p>
+      {days ? `On ${days} ${days === 1 ? 'day' : 'days'} with learners, pace wasn’t counted` : 'Pace wasn’t counted'}: from 4 October
+      until the app was updated, GoatCounter refused most learners’ pace. Those days are left out of the shares, and show no column.
+    </p>
   )
 }
 
@@ -565,7 +579,7 @@ function Footer() {
         <li>A learner is a device that opened Data Analytics in the app that day, counted once however often it was opened.</li>
         <li>Learners whose browser asks not to be tracked (Do Not Track, Global Privacy Control) are not counted, so these are a floor.</li>
         <li>Pace and week are the learner’s own, as the app works them out from what they have ticked.</li>
-        <li>The app moved to its new address on 5 October 2026; every device counts as new from that day.</li>
+        <li>A visit is the app opened from one browser; opens within 8 hours of each other are one visit.</li>
       </ul>
       <p className="mt-4">
         Collected from{' '}

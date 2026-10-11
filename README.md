@@ -118,11 +118,18 @@ they have set a start date. Two delivery modes, best available wins:
 [`src/lib/analytics.js`](src/lib/analytics.js) reports aggregate, cookieless
 tallies to the free [GoatCounter](https://www.goatcounter.com) site `alxpace`
 (set in [`src/lib/analyticsConfig.js`](src/lib/analyticsConfig.js)): app opens,
-installed-vs-browser, and once per device per day the learner's program, week,
-pace, and week-with-pace (`program-da`, `week-4`, `status-behind`,
-`week-4-behind`; other programs prefix their weeks, `gd-week-5-behind`). Never
-anything identifying a learner. Do Not Track and Global Privacy Control are
-honored, and no third-party script runs (plain GET beacons).
+installed-vs-browser, and once per device per day one event naming the
+learner's week and pace together (`week-4-behind`; other programs prefix their
+weeks, `gd-week-5-behind`). Never anything identifying a learner. Do Not Track
+and Global Privacy Control are honored, and no third-party script runs (plain
+GET beacons).
+
+One daily event, not one per fact: GoatCounter takes at most 4 hits a second
+from one device and refuses the rest, and the day's first open already sends
+two. From 4 October the app sent program, week and pace separately, five hits
+in all, so most paces were refused; the dashboard shows those days without a
+pace. It reads every set of events the app has sent since 20 July (see
+`readDay` in [`src/metrics/model.js`](src/metrics/model.js)).
 
 **The dashboard** at
 [alxprograms.github.io/alx-pace/metrics/](https://alxprograms.github.io/alx-pace/metrics/)
@@ -135,7 +142,7 @@ what each chart says written beside it. The numbers are public, like the repo.
 ```
 GoatCounter ──API──▶ .github/workflows/metrics.yml (daily, 05:23 UTC)
                        ├─ scripts/metrics/collect.mjs → metrics.json on the `metrics` branch
-                       └─ Mondays: scripts/metrics/digest.mjs → Slack
+                       └─ scripts/metrics/digest.mjs → Slack, once a week (digest.json)
 metrics.json ──raw.githubusercontent.com──▶ /metrics/ (the dashboard page)
 ```
 
@@ -144,6 +151,14 @@ The numbers live on their own `metrics` branch, never `main`: a commit to
 the real ones. The dashboard reads the file straight from GitHub, so new
 numbers show without a deploy.
 
+The digest covers last Monday to Sunday and goes out on the Monday. If that
+run fails, or GitHub skips it, the next morning's run posts it instead: the
+last week posted is kept in `digest.json` beside the numbers.
+
+The dashboard is its own build (`vite.metrics.config.js`), run by `npm run
+build` after the app's, into `dist/metrics/`. Built apart, it can't change a
+single file of the app's.
+
 **Setting it up (repository owner, once):**
 
 1. In GoatCounter, *Settings → API*: create a key with only **Read statistics**.
@@ -151,8 +166,9 @@ numbers show without a deploy.
    and variables → Actions*).
 2. In Slack, create an app with an **Incoming Webhook** for the channel the
    digest goes to. Add its URL as the secret `SLACK_WEBHOOK_URL`.
-3. *Actions → Learner metrics → Run workflow* (tick *Post the weekly Slack
-   digest now* to see the first one straight away).
+3. *Actions → Learner metrics → Run workflow*. The first run collects every
+   day since 20 July and posts last week's digest. (Tick *Post last week's
+   Slack digest again* to repeat one already posted.)
 
 Without the key the job collects nothing and says so; without the webhook it
 prints the digest in the log. Neither turns the run red.
@@ -161,7 +177,7 @@ prints the digest in the log. Neither turns the run red.
 
 ```bash
 mkdir -p metrics-data                                         # git-ignored, as in the workflow
-node scripts/metrics/sample.mjs > metrics-data/metrics.json   # made-up data
+node scripts/metrics/sample.mjs > metrics-data/metrics.json   # made-up data (--today to move it)
 npm run dev                          # then open /metrics/?data=/metrics-data/metrics.json
 node scripts/metrics/digest.mjs --dir metrics-data --dry-run  # the Slack message, printed
 ```
@@ -388,7 +404,7 @@ src/
 │   └── dashboard/           #   the /metrics/ page (its own entry, styles and charts)
 ├── App.jsx                  # state machine wiring it all together
 └── main.jsx
-metrics/index.html           # the dashboard's HTML entry (a second Vite page)
+metrics/index.html           # the dashboard's HTML entry (its own build: vite.metrics.config.js)
 scripts/metrics/             # collect.mjs, digest.mjs, sample.mjs (run by metrics.yml)
 ```
 

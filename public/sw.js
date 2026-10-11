@@ -64,12 +64,11 @@ self.addEventListener('fetch', (event) => {
   /*
     Nor is the learner-usage dashboard (metrics/), a separate page that only
     the people running the app read. Offline, the fallback below would show
-    the app at its address; and its scripts, cached here, would only fill a
-    learner's phone. So the SW leaves it, and anything it loads, to the
-    network.
+    the app at its address; and its files, cached here, would only fill a
+    learner's phone. Everything it loads is built under metrics/ too
+    (vite.metrics.config.js), so this one rule leaves all of it to the network.
   */
   if (url.pathname.startsWith(METRICS_PATH)) return
-  if (request.referrer && new URL(request.referrer).pathname.startsWith(METRICS_PATH)) return
 
   // Navigations: network-first with offline fallback to the cached shell.
   if (request.mode === 'navigate') {

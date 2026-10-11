@@ -214,10 +214,19 @@ exits as a no-op. `PUSH_ENDPOINT` is a build-time constant — setting the repo
 secret alone changes nothing on the client.
 
 Analytics is **active**: `GOATCOUNTER_SITE = 'alxpace'`. Plain GET beacons, no
-vendor script, DNT and GPC honoured, aggregate counts only. The event names
-(`pacingEvents` in `src/lib/analytics.js`) are a contract with the dashboard:
-`readDay` in `src/metrics/model.js` parses them, and a renamed event starts a
-new series, so the dashboard loses the old one.
+vendor script, DNT and GPC honoured, aggregate counts only.
+
+- **GoatCounter refuses a 5th hit within a second from one device** (its
+  `/count` limit is 4/s per IP and browser). The day's first open sends 3:
+  `/`, `open-*`, and the one daily event, `week-N-<status>`. Adding a beacon
+  to that burst loses data silently; `analytics.test.js` holds it at 4 or
+  fewer. From 4 to ~11 Oct 2026 the app sent 5, and most paces were refused.
+- The daily event is sent with `ns=true` (count every hit): the app already
+  sends it once a day, and GoatCounter's own 8-hour sessions would merge
+  learners behind one address.
+- Event names are a contract with the dashboard. `readDay` in
+  `src/metrics/model.js` reads every set the app has ever sent (its comment
+  lists them); a new name needs a reading there, or its days read as empty.
 
 ### The learner dashboard (`/metrics/`)
 
@@ -227,15 +236,18 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
   Mondays: scripts/metrics/digest.mjs → Slack incoming webhook
 ```
 
-- A second Vite entry (`metrics` beside `index` in `vite.config.js`). It must not
-  change the app's bundle: the dashboard imports its portraits and logo with
-  `?inline` and has its own Tailwind config (`tailwind.metrics.config.js`; the
-  app's config excludes `src/metrics/**`). Check the app's built file names
-  after touching either page's imports.
+- Its own Vite build (`vite.metrics.config.js`, run by `npm run build` after the
+  app's) into `dist/metrics/`, so it can never change the app's output: never
+  add it to `vite.config.js` as a second input, which shares chunks with the
+  app. It has its own Tailwind config too (`tailwind.metrics.config.js`; the
+  app's config excludes `src/metrics/**`, so the app's CSS stays its own).
 - `src/metrics/*.js` also runs in plain Node (the scripts), so it uses explicit
   `.js` import paths and never the app's extensionless modules. That is why
   `config.js` repeats the app's address; a test holds the two equal.
-- The service worker leaves `metrics/` and everything it loads to the network.
+- The service worker leaves `metrics/` to the network: the page and every file
+  it loads live under that path.
+- The Slack digest posts each week once, on the Monday or the first run after;
+  the last week posted is in `digest.json` on the `metrics` branch.
 - Secrets `GOATCOUNTER_API_KEY` (read-only stats key) and `SLACK_WEBHOOK_URL`
   are the owner's to add. Without them each step is a logged no-op, never red.
 - `?data=<url>` points the page at another file, under `npm run dev` only.

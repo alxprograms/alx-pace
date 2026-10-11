@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { fileURLToPath } from 'node:url'
 
 // The curriculum CSV is imported at build time via the `?raw` suffix
 // (see src/lib/schedule.js), so it is bundled deterministically with the
@@ -14,18 +13,6 @@ export default defineConfig({
 
   build: {
     rollupOptions: {
-      /*
-        Two pages: the app, and the learner-usage dashboard at metrics/
-        (src/metrics/dashboard). The app's entry keeps the name `index`, so its
-        files are named as they always were, and the dashboard imports none of
-        the app's modules (it takes its own copies of the portraits and the
-        logo), so nothing of the app moves into a shared chunk: they share
-        React's chunk and nothing else.
-      */
-      input: {
-        index: fileURLToPath(new URL('./index.html', import.meta.url)),
-        metrics: fileURLToPath(new URL('./metrics/index.html', import.meta.url)),
-      },
       output: {
         /*
           React gets its own chunk, and the reason is bandwidth rather than
