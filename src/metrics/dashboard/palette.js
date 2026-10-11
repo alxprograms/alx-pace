@@ -14,6 +14,8 @@
 export const SURFACE = '#0B1645'
 export const LIME = '#C4E878'
 export const DAILY = 'rgba(168, 186, 255, 0.28)'
+/** The same columns for the days picked, among the days around them (the rest fade). */
+export const DAILY_PICKED = 'rgba(168, 186, 255, 0.6)'
 export const GRID = 'rgba(255, 255, 255, 0.08)'
 export const PACE = {
   behind: { color: '#B98A12', label: 'Behind' },

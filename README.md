@@ -133,9 +133,15 @@ limit. The dashboard reads every set of events the app has sent since 20 July
 
 **The dashboard** at
 [alxprograms.github.io/alx-pace/metrics/](https://alxprograms.github.io/alx-pace/metrics/)
-turns those counts into charts: active learners a day, the pace mix, and where
-in the course learners are, for the last 7, 30 or 90 days or everything, with
-what each chart says written beside it. The numbers are public, like the repo.
+leads with GoatCounter's own number, its **visits** (every page view and event
+it recorded, the "N out of M visits shown" on its page), with what a visit is
+written beside it. Then the charts: active learners a day, the pace mix, and
+where in the course learners are, with what each chart says written beside
+it. Learners are always whole numbers, averages too. Pick the last 7, 30 or
+90 days, everything, or any day or dates in the date boxes (or click a day's
+column); the choice stays in the address (`?from=2026-10-05&to=2026-10-11`,
+`?range=all`), so a link opens the same view, and the Slack digest's button
+opens its own week. The numbers are public, like the repo.
 
 **How it stays current, with nobody updating it:**
 

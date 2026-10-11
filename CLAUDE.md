@@ -252,6 +252,12 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
   the last week posted is in `digest.json` on the `metrics` branch.
 - Secrets `GOATCOUNTER_API_KEY` (read-only stats key) and `SLACK_WEBHOOK_URL`
   are the owner's to add. Without them each step is a logged no-op, never red.
+- What the page shows lives in its address (`src/metrics/dashboard/range.js`):
+  `?range=7|30|90|all` or `?from=&to=` days, clamped to the days on record.
+  The Slack digest's button links its week that way.
+- Visits lead the page and the digest: GoatCounter's own count (every path's
+  visits, events included), which is what its dashboard shows. Learners are
+  people, so every learner figure is a whole number (`fmtLearners`).
 - `?data=<url>` points the page at another file, under `npm run dev` only.
   `scripts/metrics/sample.mjs` makes one; README has the commands.
 
