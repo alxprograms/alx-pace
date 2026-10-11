@@ -268,7 +268,9 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
   identifies a learner from one day to the next; don't label learner-days as
   learners. `metrics.test.js` fails on a decimal in the digest.
 - Unique learners are shown as a range (`summarize().unique`): at least the
-  most on any one day, at most the learner-days; exact over one day. Don't
+  most counted on any one day, at most the learner-days. Don't call any of it
+  exact: the app's once-a-day guard is the learner's local day, GoatCounter's
+  day is UTC, so one browser can be counted twice either side of midnight. Don't
   publish a tighter floor worked out from start-date cohorts: learners can
   change their start date (it defaults to today) and reappear in another
   browser, so such a floor can overcount.

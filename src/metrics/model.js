@@ -234,9 +234,9 @@ export function summarize(rows) {
     learnerDays,
     peak: peak && peak.active > 0 ? { day: peak.day, active: peak.active } : null,
     // Unique learners: nothing identifies a learner from one day to the next,
-    // so over several days only a range. At least the most on any one day
-    // (each counted once that day), at most one per learner-day. Over one day
-    // the two meet: exact.
+    // so over several days only a range, of the learners counted. At least the
+    // most on any one day (each counted once a day, in each browser), at most
+    // one per learner-day. They meet when every learner counted was on one day.
     unique: { atLeast: peak && peak.active > 0 ? peak.active : 0, atMost: learnerDays },
     status: statusTotals,
     statusShare: Object.fromEntries(STATUSES.map((s) => [s, share(statusTotals[s], statusAll)])),

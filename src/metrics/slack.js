@@ -22,6 +22,8 @@ const signed = (x) => {
 const weekLabel = (w) => `Week ${w}`
 /** "*54 to 131*", or one number when the range is a single value. */
 const between = ({ atLeast, atMost }) => (atLeast === atMost ? `*${fmtInt(atLeast)}*` : `*${fmtInt(atLeast)} to ${fmtInt(atMost)}*`)
+/** "unique learner" for a range that is just 1, "unique learners" otherwise. */
+const uniqueNoun = ({ atLeast, atMost }) => (atLeast === 1 && atMost === 1 ? 'unique learner' : 'unique learners')
 
 /** The webhook payload for a digest from model.weeklyDigest. */
 export function digestMessage(d) {
@@ -65,8 +67,10 @@ export function digestMessage(d) {
     d.visitsTotalShown < d.visitsTotal && `${fmtInt(d.visitsTotalShown)} out of ${fmtInt(d.visitsTotal)} visits shown, as GoatCounter lists its top 10 paths`,
     `*${fmtInt(d.visits)}* visits this week (${signed(d.visitsChange)})`,
     `*${fmtInt(d.learnerDays)}* learner-days this week: each learner counted once for each day they opened Pace (${signed(d.learnerDaysChange)})`,
-    `${between(d.unique)} unique learners this week`,
-    `${between(d.uniqueTotal)} unique learners ${soFar}, since counting began: at least the most on any one day, at most one per learner-day. No exact count is possible, as nothing identifies a learner from one day to the next.`,
+    `${between(d.unique)} ${uniqueNoun(d.unique)} this week`,
+    d.uniqueTotal.atLeast === d.uniqueTotal.atMost
+      ? `${between(d.uniqueTotal)} ${uniqueNoun(d.uniqueTotal)} ${soFar}, since counting began: all counted on one day.`
+      : `${between(d.uniqueTotal)} unique learners ${soFar}, since counting began: at least the most counted on any one day, at most one per learner-day. No exact count is possible, as nothing identifies a learner from one day to the next.`,
   ]
     .filter(Boolean)
     .join('\n')

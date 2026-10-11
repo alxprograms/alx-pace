@@ -774,19 +774,21 @@ function Report({ file, view, bounds, onSelect, askedPast }) {
 }
 
 /**
- * How many different learners: exact over one day, a range over several,
- * since nothing identifies a learner from one day to the next. At least the
- * most on any one day, at most one per learner-day (summarize in model.js).
+ * How many different learners, of those counted: a range, since nothing
+ * identifies a learner from one day to the next. At least the most counted
+ * on any one day, at most one per learner-day (summarize in model.js); one
+ * number when every learner counted was on one day.
  */
 function UniqueLearners({ unique, oneDay, period, peak, peakDays, dayName }) {
   const { atLeast, atMost } = unique
-  const exact = atLeast === atMost
+  const single = atLeast === atMost
+  const peakWhen = peak && peakDays === 1 ? dayName(peak.day) : peakDays > 1 ? `on each of ${peakDays} days` : null
   return (
     <section className="pulse-card mt-5 grid gap-8 lg:grid-cols-12" aria-label="Unique learners">
       <div className="min-w-0 lg:col-span-5">
         <p className="pulse-label">Unique learners</p>
         <p className="mt-4 text-6xl font-semibold leading-none tracking-tight text-white sm:text-7xl">
-          {exact ? (
+          {single ? (
             fmtInt(atLeast)
           ) : (
             <>
@@ -799,11 +801,13 @@ function UniqueLearners({ unique, oneDay, period, peak, peakDays, dayName }) {
         <p className="mt-3 text-sm text-[#A9B3D6]">
           {atMost === 0
             ? `No learners were counted ${oneDay ? 'that day' : 'in these days'}.`
-            : exact
-              ? `Exactly, ${period}: each learner is counted once a day.`
-              : `Somewhere in this range, ${period}. No exact count is possible.`}
+            : oneDay
+              ? `Counted ${period}, each learner once that day.`
+              : single
+                ? `All counted on one day, ${dayName(peak.day)}, so the range is one number.`
+                : `Somewhere in this range, ${period}. No exact count is possible.`}
         </p>
-        {!exact && (
+        {!single && (
           <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-white/[0.08] pt-4">
             <div>
               <dt className="text-xs text-[#A9B3D6]">At least</dt>
@@ -828,20 +832,21 @@ function UniqueLearners({ unique, oneDay, period, peak, peakDays, dayName }) {
         <h3 className="text-sm font-semibold text-white">Why there is no exact number over several days</h3>
         <div className="mt-3 space-y-3 text-sm leading-relaxed text-[#A9B3D6]">
           <p>
-            Pace has no accounts and sends nothing that identifies a learner. Each day it counts the learners who opened it, once each, so a
-            single day’s count is exact. Across days the counts can’t be joined up: a learner who opened Pace on five days looks the same as five
-            learners who opened it once.
+            Pace has no accounts and sends nothing that identifies a learner. Each day it counts the learners who opened it, once each. Across
+            days the counts can’t be joined up: a learner who opened Pace on five days looks the same as five learners who opened it once.
           </p>
-          {exact ? (
-            <p>Pick more than one day and this becomes a range.</p>
-          ) : (
+          {!single && (
             <p>
-              So the page gives a range. <Em>At least {fmtInt(atLeast)}</Em>: the most learners on any one day
-              {peak && peakDays === 1 ? <>, {dayName(peak.day)}</> : peakDays > 1 ? <>, reached on {peakDays} days</> : ''}, who were all different
-              people. <Em>At most {fmtInt(atMost)}</Em>: one learner for every learner-day. The true number is somewhere between.
+              So the page gives a range for the learners counted. <Em>At least {fmtInt(atLeast)}</Em>: the most counted on one day
+              {peakWhen ? ` (${peakWhen})` : ''}, as each learner is counted once a day. <Em>At most {fmtInt(atMost)}</Em>: one learner for every
+              learner-day. The number is somewhere between.
             </p>
           )}
-          <p>A learner who uses Pace in two browsers, a phone and a laptop say, counts as two.</p>
+          {oneDay && atMost > 0 && <p>Pick more than one day and this becomes a range.</p>}
+          <p>
+            Counted means counted in one browser: a learner who uses Pace in two, a phone and a laptop say, counts as two, and so can one who
+            opens it either side of midnight. Learners whose browser asks not to be tracked aren’t counted at all.
+          </p>
         </div>
       </div>
     </section>
