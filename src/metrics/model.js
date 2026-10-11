@@ -179,6 +179,9 @@ export function readDay(counts = {}, program = 'da') {
   }
   return {
     active: Object.values(weeks).reduce((a, b) => a + b, 0),
+    // GoatCounter's own count: every path's visits, events included.
+    visits: Object.values(counts).reduce((a, b) => a + b, 0),
+    paths: counts,
     status,
     weeks,
     weekStatus,
@@ -221,8 +224,12 @@ export function summarize(rows) {
   const installed = sum(rows, (r) => r.installed)
   const browser = sum(rows, (r) => r.browser)
   const peak = rows.reduce((best, r) => (r.active > (best?.active ?? -1) ? r : best), null)
+  const paths = {}
+  for (const r of rows) for (const [p, c] of Object.entries(r.paths ?? {})) paths[p] = (paths[p] ?? 0) + c
   return {
     days: n,
+    visits: sum(rows, (r) => r.visits ?? 0),
+    paths,
     learnerDays,
     avgActive: n > 0 ? learnerDays / n : 0,
     peak: peak && peak.active > 0 ? { day: peak.day, active: peak.active } : null,
@@ -280,6 +287,34 @@ export function mostBehindWeek(weekStatus, minimum = 10) {
   return best
 }
 
+/**
+ * GoatCounter's dashboard lists its top `limit` paths (10 unless changed in
+ * its settings) and says "N out of M visits shown": N is what those paths
+ * hold, M is every visit. The same for a stretch of days here.
+ */
+export function shownVisits(paths, limit = 10) {
+  return Object.values(paths)
+    .sort((a, b) => b - a)
+    .slice(0, limit)
+    .reduce((a, b) => a + b, 0)
+}
+
+/**
+ * What the visits were: app opens (the page view), how the app was opened,
+ * and the daily week-and-pace events (program, week and pace, in every set
+ * the app has sent). Anything else, such as a test hit, is `other`.
+ */
+export function visitKinds(paths) {
+  const kinds = { opens: 0, howOpened: 0, weekPace: 0, other: 0 }
+  for (const [p, n] of Object.entries(paths)) {
+    if (p === '/') kinds.opens += n
+    else if (p.startsWith('open-')) kinds.howOpened += n
+    else if (/^(program-|status-|(?:[a-z]+-)?week-)/.test(p)) kinds.weekPace += n
+    else kinds.other += n
+  }
+  return kinds
+}
+
 /** The trailing average of `pick` over `window` days, null until the window is full. */
 export function movingAverage(rows, pick, window = 7) {
   return rows.map((_, i) => {
@@ -311,6 +346,8 @@ export function weeklyDigest(days, today, program = 'da') {
     from,
     to,
     program,
+    visits: week.visits,
+    visitsChange: change(week.visits, prior.visits),
     avgActive: week.avgActive,
     avgActiveChange: change(week.avgActive, prior.avgActive),
     learnerDays: week.learnerDays,
