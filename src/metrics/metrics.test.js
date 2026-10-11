@@ -337,15 +337,36 @@ describe('the Monday digest', () => {
     // A day after the digest's week, collected by Monday's run, is not in its total.
     expect(weeklyDigest({ ...days, '2026-10-12': { '/': 40 } }, '2026-10-12').visitsTotal).toBe(560)
     const lines = digestMessage(d).blocks[1].text.text.split('\n')
-    expect(lines.slice(0, 2)).toEqual(['*560* visits on GoatCounter so far, since counting began on 28 Sept 2026', '*350* of them this week (↑ 67% on the week before)'])
+    expect(lines.slice(0, 2)).toEqual(['*560* visits on GoatCounter so far, since counting began on 28 Sept 2026', '*350* visits this week (↑ 67% on the week before)'])
+    // Counting began weeks before the two compared: the total is every day, not those two weeks.
+    const earlier = weeklyDigest({ ...days, '2026-09-14': { '/': 5 } }, '2026-10-12')
+    expect([earlier.since, earlier.visitsTotal]).toEqual(['2026-09-14', 565])
+    expect(digestMessage(earlier).blocks[1].text.text.split('\n')[0]).toBe('*565* visits on GoatCounter so far, since counting began on 14 Sept 2026')
+  })
+
+  it('says where the total stops, not "so far", when collecting stopped before the week ended', () => {
+    // Nothing stored after Thursday 8 Oct: the key removed, say, so the job collects nothing.
+    const stopped = Object.fromEntries(Object.entries(days).filter(([day]) => day <= '2026-10-08'))
+    const msg = digestMessage(weeklyDigest(stopped, '2026-10-12'))
+    const all = JSON.stringify(msg)
+    expect(all).not.toContain('so far')
+    expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*416* visits on GoatCounter to 8 Oct 2026, since counting began on 28 Sept 2026')
+    expect(msg.text).toContain('416 visits to 8 Oct 2026; this week')
+    expect(all).toContain('counted from 28 Sept 2026 to Thursday 8 Oct')
   })
 
   it('says "N out of M visits shown" as GoatCounter does when it lists only some paths', () => {
     // 12 paths, 1 to 12 visits each: GoatCounter's top 10 hold 12 + 11 + … + 3.
     const many = { '2026-10-05': Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`week-${i + 1}`, i + 1])) }
-    const d = weeklyDigest(many, '2026-10-12')
-    expect([d.visitsTotalShown, d.visitsTotal]).toEqual([75, 78])
-    expect(digestMessage(d).blocks[1].text.text.split('\n')[1]).toBe('75 out of 78 visits shown, as GoatCounter lists its top 10 paths')
+    // A week earlier, 10 app opens: 13 paths in all, so the line is every day's (82 of 88), not the week's (75 of 78).
+    // The stored days run on to the week's Sunday, as the morning job's always do.
+    const d = weeklyDigest({ ...many, '2026-09-28': { '/': 10 }, '2026-10-11': {} }, '2026-10-12')
+    expect([d.visitsTotalShown, d.visitsTotal, d.visits]).toEqual([82, 88, 78])
+    expect(digestMessage(d).blocks[1].text.text.split('\n').slice(0, 3)).toEqual([
+      '*88* visits on GoatCounter so far, since counting began on 28 Sept 2026',
+      '82 out of 88 visits shown, as GoatCounter lists its top 10 paths',
+      '*78* visits this week (↑ 680% on the week before)',
+    ])
   })
 
   it('says so when nothing was counted', () => {
@@ -355,13 +376,13 @@ describe('the Monday digest', () => {
     expect(msg.text).toContain('no learner activity')
     expect(JSON.stringify(msg.blocks)).not.toContain('so far')
     // A quiet week still carries the running total.
-    const quiet = digestMessage(weeklyDigest({ '2026-09-30': { '/': 7, 'week-1': 2 } }, '2026-10-12'))
+    const quiet = digestMessage(weeklyDigest({ '2026-09-30': { '/': 7, 'week-1': 2 }, '2026-10-11': {} }, '2026-10-12'))
     expect(quiet.blocks[1].text.text).toContain('*9* visits on GoatCounter so far, since counting began on 30 Sept 2026')
   })
 
   it('reads as a Slack message with the numbers, the comparison and the dashboard link', () => {
     const msg = digestMessage(weeklyDigest(days, '2026-10-12'))
-    expect(msg.text).toBe('ALX Pace · Data Analytics · week of 5 Oct – 11 Oct 2026: 560 visits so far (350 this week), 91 learner-days')
+    expect(msg.text).toBe('ALX Pace · Data Analytics · week of 5 Oct – 11 Oct 2026: 560 visits so far; this week 350 visits, 91 learner-days')
     const all = JSON.stringify(msg.blocks)
     // Visits lead: GoatCounter's own number, then learners.
     expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*560* visits on GoatCounter so far, since counting began on 28 Sept 2026')

@@ -334,14 +334,19 @@ export function weeklyDigest(days, today, program = 'da') {
     .slice(0, 3)
     .map(([w, learnerDays]) => ({ week: w, learnerDays }))
   // Every visit since counting began, to the end of the week: the running
-  // total, which GoatCounter's own page shows over all its days.
-  const since = Object.keys(days).filter((d) => isDay(d) && d <= to).sort()[0] ?? null
-  const all = summarize(since ? series(days, since, to, program) : [])
+  // total, which GoatCounter's own page shows over all its days. `through` is
+  // the last day on record: before `to` only when collecting has stopped, and
+  // then the total isn't "so far".
+  const onRecord = Object.keys(days).filter((d) => isDay(d) && d <= to).sort()
+  const since = onRecord[0] ?? null
+  const through = onRecord.at(-1) ?? null
+  const all = summarize(since ? series(days, since, through, program) : [])
   return {
     from,
     to,
     program,
     since,
+    through,
     visitsTotal: all.visits,
     visitsTotalShown: shownVisits(all.paths),
     visits: week.visits,
