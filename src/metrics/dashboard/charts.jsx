@@ -38,6 +38,33 @@ function barPath(x, y, w, h, { horizontal = false } = {}) {
   return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`
 }
 
+/**
+ * What a chart reads out for the day or week in hand: the tooltip on screen,
+ * and the same words in a live region, so a screen reader speaks each one as
+ * the arrow keys move (the svg itself is hidden from it).
+ */
+function Readout({ item, ...tooltip }) {
+  return (
+    <>
+      <p className="sr-only" aria-live="polite">
+        {item ? `${tooltip.title}: ${tooltip.rows.map((r) => `${r.value} ${r.label}`).join(', ')}` : ''}
+      </p>
+      {item && <Tooltip {...tooltip} />}
+    </>
+  )
+}
+
+/** Pointer handlers for a chart: hover reads, a tap reads and stays until the next. */
+function pointerProps(pick, setIndex) {
+  return {
+    onPointerMove: pick,
+    onPointerDown: pick,
+    onPointerLeave: (e) => e.pointerType !== 'touch' && setIndex(null),
+  }
+}
+
+const plural = (value, one, many) => (value === '1' ? one : many)
+
 /** The read-out: values lead, names follow, each keyed by a short line of its colour. */
 function Tooltip({ x, y, width, title, rows }) {
   const left = Math.max(8, Math.min(x + 12, width - 188))
@@ -163,17 +190,17 @@ export function DailyActiveChart({ rows, average, label }) {
       <div
         tabIndex={0}
         role="group"
-        aria-label={`${label}. Use the arrow keys to read each day.`}
+        aria-label={`${label}. Use the arrow keys to read each day, or Show table for all of them.`}
         onKeyDown={onKeyDown}
-        onPointerMove={onPointer}
-        onPointerLeave={() => setIndex(null)}
+        {...pointerProps(onPointer, setIndex)}
         onBlur={() => setIndex(null)}
         className="rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[#C4E878]"
       >
         {width > 0 && (
           <svg width={width} height={height} aria-hidden="true" className="block overflow-visible">
             <defs>
-              <filter id={glow} x="-10%" y="-40%" width="120%" height="180%">
+              {/* In user space: a flat line has no height, and a box-relative region would hide it. */}
+              <filter id={glow} filterUnits="userSpaceOnUse" x="0" y="0" width={width} height={height}>
                 <feGaussianBlur stdDeviation="4" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
@@ -202,18 +229,21 @@ export function DailyActiveChart({ rows, average, label }) {
           </svg>
         )}
       </div>
-      {hovered && (
-        <Tooltip
-          x={centre(index)}
-          y={8}
-          width={width}
-          title={fmtDay(hovered.day, { weekday: 'short', day: 'numeric', month: 'short' })}
-          rows={[
-            { label: 'learners that day', value: fmtInt(hovered.active), color: DAILY },
-            ...(average[index] != null ? [{ label: '7-day average', value: fmtOne(average[index]), color: LIME }] : []),
-          ]}
-        />
-      )}
+      <Readout
+        item={hovered}
+        x={hovered ? centre(index) : 0}
+        y={8}
+        width={width}
+        title={hovered ? fmtDay(hovered.day, { weekday: 'short', day: 'numeric', month: 'short' }) : ''}
+        rows={
+          hovered
+            ? [
+                { label: plural(fmtInt(hovered.active), 'learner that day', 'learners that day'), value: fmtInt(hovered.active), color: DAILY },
+                ...(average[index] != null ? [{ label: '7-day average', value: fmtOne(average[index]), color: LIME }] : []),
+              ]
+            : []
+        }
+      />
     </div>
   )
 }
@@ -242,10 +272,9 @@ export function PaceMixChart({ rows, label }) {
       <div
         tabIndex={0}
         role="group"
-        aria-label={`${label}. Use the arrow keys to read each day.`}
+        aria-label={`${label}. Use the arrow keys to read each day, or Show table for all of them.`}
         onKeyDown={onKeyDown}
-        onPointerMove={onPointer}
-        onPointerLeave={() => setIndex(null)}
+        {...pointerProps(onPointer, setIndex)}
         onBlur={() => setIndex(null)}
         className="rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[#C4E878]"
       >
@@ -284,19 +313,24 @@ export function PaceMixChart({ rows, label }) {
           </svg>
         )}
       </div>
-      {hovered && totalOf(hovered) > 0 && (
-        <Tooltip
-          x={centre(index)}
-          y={8}
-          width={width}
-          title={fmtDay(hovered.day, { weekday: 'short', day: 'numeric', month: 'short' })}
-          rows={[...PACE_ORDER].reverse().map((s) => ({
-            label: `${PACE[s].label.toLowerCase()} (${fmtInt(hovered.status[s])})`,
-            value: fmtPct(hovered.status[s] / totalOf(hovered)),
-            color: PACE[s].color,
-          }))}
-        />
-      )}
+      <Readout
+        item={hovered}
+        x={hovered ? centre(index) : 0}
+        y={8}
+        width={width}
+        title={hovered ? fmtDay(hovered.day, { weekday: 'short', day: 'numeric', month: 'short' }) : ''}
+        rows={
+          !hovered
+            ? []
+            : totalOf(hovered) > 0
+              ? [...PACE_ORDER].reverse().map((s) => ({
+                  label: `${PACE[s].label.toLowerCase()} (${fmtInt(hovered.status[s])})`,
+                  value: fmtPct(hovered.status[s] / totalOf(hovered)),
+                  color: PACE[s].color,
+                }))
+              : [{ label: 'not counted', value: 'Pace', color: GRID }]
+        }
+      />
     </div>
   )
 }
@@ -335,10 +369,9 @@ export function WeeksChart({ weeks, label }) {
       <div
         tabIndex={0}
         role="group"
-        aria-label={`${label}. Use the arrow keys to read each week.`}
+        aria-label={`${label}. Use the arrow keys to read each week, or Show table for all of them.`}
         onKeyDown={onKeyDown}
-        onPointerMove={onPointer}
-        onPointerLeave={() => setIndex(null)}
+        {...pointerProps(onPointer, setIndex)}
         onBlur={() => setIndex(null)}
         className="rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[#C4E878]"
       >
@@ -373,14 +406,17 @@ export function WeeksChart({ weeks, label }) {
           </svg>
         )}
       </div>
-      {hovered && (
-        <Tooltip
-          x={centre(index)}
-          y={8}
-          width={width}
-          title={`Week ${hovered.week}`}
-          rows={[
-            { label: 'learners a day', value: hovered.avg > 0 ? fmtOne(hovered.avg) : '0', color: LIME },
+      <Readout
+        item={hovered}
+        x={hovered ? centre(index) : 0}
+        y={8}
+        width={width}
+        title={hovered ? `Week ${hovered.week}` : ''}
+        rows={
+          !hovered
+            ? []
+            : [
+            { label: plural(fmtOne(hovered.avg), 'learner a day', 'learners a day'), value: hovered.avg > 0 ? fmtOne(hovered.avg) : '0', color: LIME },
             ...(paceTotal(hovered.pace) > 0
               ? [...PACE_ORDER].reverse().map((k) => ({
                   label: PACE[k].label.toLowerCase(),
@@ -388,9 +424,9 @@ export function WeeksChart({ weeks, label }) {
                   color: PACE[k].color,
                 }))
               : []),
-          ]}
-        />
-      )}
+              ]
+        }
+      />
     </div>
   )
 }
@@ -464,7 +500,7 @@ export function MeterDial({ share, label }) {
   return (
     <Dial label={label} value={fmtPct(share)}>
       <defs>
-        <filter id={glow} x="-20%" y="-20%" width="140%" height="140%">
+        <filter id={glow} filterUnits="userSpaceOnUse" x="0" y="0" width={DIAL.w} height={DIAL.h}>
           <feGaussianBlur stdDeviation="3" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />

@@ -58,6 +58,12 @@
       radial-gradient(50rem 30rem at 110% 110%, rgba(196, 232, 120, 0.12), transparent 60%),
       #020b33;
   }
+  /* The header is pinned at lg: keep focused controls clear of it. */
+  @media (min-width: 1024px) {
+    html {
+      scroll-padding-top: 6rem;
+    }
+  }
   ::selection {
     background: #c4e878;
     color: #03134f;

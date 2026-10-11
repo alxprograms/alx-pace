@@ -249,7 +249,9 @@ export function summarize(rows) {
 /**
  * The weekly rhythm: average learners on each weekday, Monday first, with the
  * busiest and the quietest. Null until every weekday has been seen twice (one
- * Monday is an anecdote, not a rhythm) or when the days don't differ.
+ * Monday is an anecdote, not a rhythm) or when the days don't differ. A
+ * busiest or quietest shared by two weekdays is null: naming one would be
+ * wrong.
  */
 export function weekdayPattern(rows) {
   const totals = Array(7).fill(0)
@@ -261,9 +263,13 @@ export function weekdayPattern(rows) {
   }
   if (seen.some((n) => n < 2)) return null
   const avg = totals.map((t, i) => t / seen[i])
-  const busiest = avg.indexOf(Math.max(...avg))
-  const quietest = avg.indexOf(Math.min(...avg))
-  return avg[busiest] > avg[quietest] ? { avg, busiest, quietest } : null
+  const max = Math.max(...avg)
+  const min = Math.min(...avg)
+  if (max === min) return null
+  const only = (v) => (avg.filter((a) => a === v).length === 1 ? avg.indexOf(v) : null)
+  const busiest = only(max)
+  const quietest = only(min)
+  return busiest == null && quietest == null ? null : { avg, busiest, quietest }
 }
 
 /**

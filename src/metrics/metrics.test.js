@@ -249,6 +249,13 @@ describe('what the dashboard says about it', () => {
     expect(weekdayPattern(dayRange('2026-09-07', '2026-09-20').map((d) => day(d, 3)))).toBeNull()
   })
 
+  it('names no busiest or quietest weekday that another weekday ties', () => {
+    // Mondays busiest; Tuesday to Saturday all tied for quietest.
+    const p = weekdayPattern(dayRange('2026-09-07', '2026-09-20').map((d, i) => day(d, [3, 0, 0, 0, 0, 0, 1][i % 7])))
+    expect([p.busiest, p.quietest]).toEqual([0, null])
+    expect(weekdayPattern(dayRange('2026-09-07', '2026-09-20').map((d, i) => day(d, [3, 3, 0, 0, 0, 0, 1][i % 7])))).toBeNull()
+  })
+
   it('finds the week where behind is most common, ignoring a handful of learners', () => {
     const weekStatus = {
       2: { behind: 2, 'on-track': 8, ahead: 0 },

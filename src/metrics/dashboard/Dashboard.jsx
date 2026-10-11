@@ -8,7 +8,7 @@ import logo from '../../assets/alx/header-logo.svg'
 import { APP_URL, DATA_URL } from '../config.js'
 import { addDays, byWeek, change, daysBetween, mostBehindWeek, movingAverage, readFile, series, summarize, weekdayPattern, STATUSES } from '../model.js'
 import { DailyActiveChart, Legend, MeterDial, PaceDial, PaceMixChart, Sparkline, WeeksChart } from './charts.jsx'
-import { fmtChange, fmtDay, fmtInt, fmtOne, fmtPct } from './format.js'
+import { fmtAvg, fmtChange, fmtDay, fmtInt, fmtOne, fmtPct } from './format.js'
 import { DAILY, LIME, PACE, PACE_ORDER } from './palette.js'
 
 /*
@@ -233,9 +233,12 @@ function Report({ file, range }) {
     const length = daysBetween(from, to) + 1
     const rows = series(file.days, from, to, PROGRAM)
     const prior = summarize(series(file.days, addDays(from, -length), addDays(from, -1), PROGRAM))
-    // The average line needs the six days before the range to start on its first day.
-    const lead = series(file.days, addDays(from, -6), to, PROGRAM)
-    const average = movingAverage(lead, (r) => r.active).slice(6)
+    // The average line takes the six days before the range, so it starts on
+    // its first day, but only days on record: before the first one it waits
+    // for seven, rather than count the days before as zeros.
+    const leadFrom = addDays(from, -6) < first ? first : addDays(from, -6)
+    const lead = series(file.days, leadFrom, to, PROGRAM)
+    const average = movingAverage(lead, (r) => r.active).slice(daysBetween(leadFrom, from))
     const s = summarize(rows)
     const weekKeys = [...new Set([...DA_WEEKS, ...Object.keys(s.weeks)])].sort(byWeek)
     const weeks = weekKeys.map((w) => ({
@@ -263,6 +266,10 @@ function Report({ file, range }) {
   const topWeek = view.weeks.reduce((best, w) => (w.avg > (best?.avg ?? 0) ? w : best), null)
   const behindWeek = view.paceFrom ? mostBehindWeek(s.weekStatus) : null
   const activeChange = view.hasPrior ? change(s.avgActive, prior.avgActive) : null
+  // "Compared with" only when something on the page is.
+  const compared = activeChange != null || (view.hasPrior && priorPaceAll > 0)
+  const peakDays = s.peak ? rows.filter((r) => r.active === s.peak.active).length : 0
+  const avgText = fmtAvg(s.avgActive)
   const dayName = (day) => fmtDay(day, { weekday: 'long', day: 'numeric', month: 'short' })
 
   return (
@@ -271,15 +278,15 @@ function Report({ file, range }) {
         <h2 className="text-lg font-semibold text-white">At a glance</h2>
         <p className="text-sm text-[#A9B3D6]">
           {rangeText}
-          {versus && <span className="text-[#8A95BF]"> · compared with {versus}</span>}
+          {compared && <span className="text-[#8A95BF]"> · compared with {versus}</span>}
         </p>
       </div>
 
-      <section className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="Figures at a glance">
-        <div className="pulse-card flex flex-col sm:col-span-2 lg:col-span-1">
+      <section className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="Figures at a glance">
+        <div className="pulse-card flex min-w-0 flex-col sm:col-span-2 lg:col-span-1">
           <p className="pulse-label">Active learners a day</p>
           <div className="mt-4 flex items-end gap-3">
-            <p className="text-6xl font-semibold leading-none tracking-tight text-white">{fmtOne(s.avgActive)}</p>
+            <p className="text-6xl font-semibold leading-none tracking-tight text-white">{avgText}</p>
             <Delta value={activeChange} />
           </div>
           <p className="mt-2 text-xs text-[#A9B3D6]">On average, {period}</p>
@@ -301,7 +308,7 @@ function Report({ file, range }) {
           </dl>
         </div>
 
-        <div className="pulse-card flex flex-col">
+        <div className="pulse-card flex min-w-0 flex-col">
           <p className="pulse-label">Keeping pace</p>
           <div className="mt-6 flex-1">
             <PaceDial counts={s.status} label={`Pace: ${PACE_ORDER.map((k) => `${PACE[k].label.toLowerCase()} ${fmtPct(s.statusShare[k])}`).join(', ')}`} />
@@ -320,7 +327,7 @@ function Report({ file, range }) {
           </ul>
         </div>
 
-        <div className="pulse-card flex flex-col">
+        <div className="pulse-card flex min-w-0 flex-col">
           <p className="pulse-label">Installed app</p>
           <div className="mt-6 flex-1">
             <MeterDial share={s.installedShare} label={`${fmtPct(s.installedShare)} of visits from the home screen`} />
@@ -350,19 +357,36 @@ function Report({ file, range }) {
             <>
               <p>
                 <Em>
-                  {fmtOne(s.avgActive)} {s.avgActive === 1 ? 'learner' : 'learners'}
+                  {avgText === '<0.1' ? 'Fewer than 1 learner' : `${avgText} ${avgText === '1' ? 'learner' : 'learners'}`}
                 </Em>{' '}
                 opened Pace on an average day {period}
                 {activeChange != null && `, ${changeWords(activeChange)} ${versus}`}.
               </p>
-              {s.peak && (
-                <p>
-                  The busiest day was <Em>{dayName(s.peak.day)}</Em>, with <Em>{fmtInt(s.peak.active)}</Em>.
-                </p>
-              )}
+              {s.peak &&
+                (peakDays === 1 ? (
+                  <p>
+                    The busiest day was <Em>{dayName(s.peak.day)}</Em>, with <Em>{fmtInt(s.peak.active)}</Em>.
+                  </p>
+                ) : (
+                  <p>
+                    The most on one day was <Em>{fmtInt(s.peak.active)}</Em>, reached on <Em>{peakDays} days</Em>.
+                  </p>
+                ))}
               {rhythm && (
                 <p>
-                  Week on week, <Em>{WEEKDAYS[rhythm.busiest]}</Em> are the busiest and <Em>{WEEKDAYS[rhythm.quietest]}</Em> the quietest.
+                  Week on week,{' '}
+                  {rhythm.busiest != null && (
+                    <>
+                      <Em>{WEEKDAYS[rhythm.busiest]}</Em> are the busiest
+                    </>
+                  )}
+                  {rhythm.busiest != null && rhythm.quietest != null && ' and '}
+                  {rhythm.quietest != null && (
+                    <>
+                      <Em>{WEEKDAYS[rhythm.quietest]}</Em> {rhythm.busiest != null ? 'the quietest' : 'are the quietest'}
+                    </>
+                  )}
+                  .
                 </p>
               )}
               <p className="text-[#8A95BF]">Each column is a day; the lime line is the 7-day average, which smooths out the weekly rhythm.</p>
@@ -443,7 +467,8 @@ function Report({ file, range }) {
           ) : (
             <>
               <p>
-                The most learners are in <Em>Week {topWeek.week}</Em>, about <Em>{fmtOne(topWeek.avg)}</Em> a day.
+                The most learners are in <Em>Week {topWeek.week}</Em>,{' '}
+                {fmtAvg(topWeek.avg) === '<0.1' ? 'though fewer than 1 a day' : <>about <Em>{fmtOne(topWeek.avg)}</Em> a day</>}.
               </p>
               {behindWeek && (
                 <p>
@@ -576,9 +601,12 @@ function Footer() {
     <footer className="mt-20 border-t border-white/[0.08] pt-6 text-xs leading-relaxed text-[#8A95BF]">
       <p className="pulse-label">How these numbers are counted</p>
       <ul className="mt-3 grid gap-x-10 gap-y-2 sm:grid-cols-2">
-        <li>A learner is a device that opened Data Analytics in the app that day, counted once however often it was opened.</li>
+        <li>
+          A learner is a device with a Data Analytics course under way (start date set, course not yet finished) that opened the app that
+          day, counted once however often it was opened.
+        </li>
         <li>Learners whose browser asks not to be tracked (Do Not Track, Global Privacy Control) are not counted, so these are a floor.</li>
-        <li>Pace and week are the learner’s own, as the app works them out from what they have ticked.</li>
+        <li>Week is the learner’s week by the course calendar, from their start date; pace is worked out from the lessons they have ticked.</li>
         <li>A visit is the app opened from one browser; opens within 8 hours of each other are one visit.</li>
       </ul>
       <p className="mt-4">
