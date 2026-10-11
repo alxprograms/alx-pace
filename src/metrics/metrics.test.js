@@ -11,7 +11,6 @@ import {
   mostBehindWeek,
   shownVisits,
   visitKinds,
-  movingAverage,
   pathKey,
   readDay,
   readFile,
@@ -214,11 +213,10 @@ describe('a stretch of days', () => {
     })
   })
 
-  it('averages active learners over every day in it, empty days too', () => {
+  it('counts learner-days over every day in it, empty days too', () => {
     const s = summarize(series(days, '2026-10-05', '2026-10-08'))
     expect(s.days).toBe(4)
     expect(s.learnerDays).toBe(30)
-    expect(s.avgActive).toBe(7.5)
     expect(s.peak).toEqual({ day: '2026-10-06', active: 20 })
     expect(s.statusShare.behind).toBeCloseTo(2 / 30)
     expect(s.installed).toBe(1)
@@ -233,14 +231,6 @@ describe('a stretch of days', () => {
     expect(s.peak).toBeNull()
     expect(s.installedShare).toBeNull()
     expect(s.statusShare.behind).toBeNull()
-  })
-
-  it('draws a 7-day average only once a full week is behind it', () => {
-    const rows = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ active: n }))
-    const ma = movingAverage(rows, (r) => r.active)
-    expect(ma.slice(0, 6)).toEqual([null, null, null, null, null, null])
-    expect(ma[6]).toBe(4)
-    expect(ma[7]).toBe(5)
   })
 })
 
@@ -293,8 +283,8 @@ describe('the Monday digest', () => {
   it('covers last Monday to Sunday, compared with the week before', () => {
     const d = weeklyDigest(days, '2026-10-12')
     expect([d.from, d.to]).toEqual(['2026-10-05', '2026-10-11'])
-    expect(d.avgActive).toBe(13)
-    expect(d.avgActiveChange).toBeCloseTo(0.3)
+    expect(d.learnerDays).toBe(91)
+    expect(d.learnerDaysChange).toBeCloseTo(0.3)
     expect(d.peak).toEqual({ day: '2026-10-07', active: 19 })
     expect(d.topWeeks.map((w) => w.week)).toEqual(['4', '5'])
     expect(d.statusShare.behind).toBeCloseTo(0.25)
@@ -316,14 +306,16 @@ describe('the Monday digest', () => {
     expect(digestDue('2026-10-05', monday, true)).toBe(true)
   })
 
-  it('gives learners as whole people, averages included', () => {
-    // 20 learner-days over the week: 2.86 a day, said as 3.
+  it('gives exact counts, never averages: learners are people', () => {
+    // 20 learner-days over the week: said as 20, not as 2.9 a day.
     const quiet = {}
     for (const d of dayRange('2026-09-28', '2026-10-04')) quiet[d] = { 'week-1-on-track': d === '2026-09-28' ? 8 : 2 }
     const msg = digestMessage(weeklyDigest(quiet, '2026-10-05'))
-    expect(msg.text).toContain('3 active learners a day')
-    expect(JSON.stringify(msg.blocks)).toContain('*3* active learners a day on average')
-    expect(JSON.stringify(msg.blocks)).toContain('Week 1 (3 a day)')
+    const all = JSON.stringify(msg.blocks)
+    expect(msg.text).toContain('20 learner-days')
+    expect(all).toContain('*20* learner-days: each learner counted once for each day they opened Pace')
+    expect(all).toContain('Week 1: 20')
+    expect(all).not.toMatch(/a day on average|\d\.\d/)
   })
 
   it('says so when nothing was counted', () => {
@@ -335,14 +327,15 @@ describe('the Monday digest', () => {
 
   it('reads as a Slack message with the numbers, the comparison and the dashboard link', () => {
     const msg = digestMessage(weeklyDigest(days, '2026-10-12'))
-    expect(msg.text).toBe('ALX Pace · Data Analytics · week of 5 Oct – 11 Oct 2026: 350 visits, 13 active learners a day')
+    expect(msg.text).toBe('ALX Pace · Data Analytics · week of 5 Oct – 11 Oct 2026: 350 visits, 91 learner-days')
     const all = JSON.stringify(msg.blocks)
     // Visits lead: GoatCounter's own number, then learners.
     expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*350* visits on GoatCounter (↑ 67% on the week before)')
     expect(all).toContain('↑ 30% on the week before')
-    expect(all).toContain('On track 75% · Behind 25% · Ahead 0%')
-    expect(all).toContain('Week 4 (9 a day) · Week 5 (4 a day)')
-    expect(all).toContain('Wednesday, 19 learners')
+    expect(all).toContain('On track 63 (75%) · Behind 21 (25%) · Ahead 0 (0%)')
+    expect(all).toContain('Week 4: 63 · Week 5: 28')
+    expect(all).toContain('Wednesday 7 Oct, 19 learners')
+    expect(all).toContain('App opens*\\n84 · 21 from the installed app (25%)')
     // The button opens the dashboard on the digest's own week.
     expect(msg.blocks.find((b) => b.type === 'actions').elements[0].url).toBe(`${DASHBOARD_URL}?from=2026-10-05&to=2026-10-11`)
   })

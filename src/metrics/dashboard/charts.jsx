@@ -1,6 +1,6 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react'
-import { axis, fmtDay, fmtInt, fmtLearners, fmtPct } from './format.js'
-import { DAILY, DAILY_PICKED, GRID, LIME, PACE, PACE_ORDER, SURFACE } from './palette.js'
+import { axis, fmtDay, fmtInt, fmtPct } from './format.js'
+import { GRID, LIME, LIME_HOVER, PACE, PACE_ORDER, SURFACE } from './palette.js'
 
 /*
   The dashboard's charts, drawn as plain SVG: no chart library, so the page
@@ -198,26 +198,19 @@ function YGrid({ ticks, y, width, format = fmtInt }) {
 }
 
 /**
- * Active learners per day (muted columns) and their 7-day average (the lime
- * line, the point of the chart, labelled at its end).
+ * Active learners per day: one lime column a day, each its exact count. No
+ * average line: an average of people is never a whole number, and the page
+ * shows exact counts only. Days picked among the days around them stay
+ * bright; the rest fade.
  */
-export function DailyActiveChart({ rows, average, label, picked = null, onPick }) {
+export function DailyActiveChart({ rows, label, picked = null, onPick }) {
   const [ref, width] = useWidth()
-  const glow = useId().replace(/:/g, '')
   const height = 240
   const { band, centre } = dayBands(rows.length, width)
-  const { max, ticks } = axis(Math.max(1, ...rows.map((r) => r.active), ...average.filter((v) => v != null)))
+  const { max, ticks } = axis(Math.max(1, ...rows.map((r) => r.active)))
   const plotH = height - PAD.top - PAD.bottom
   const y = (v) => PAD.top + plotH - (v / max) * plotH
   const barW = Math.max(1, Math.min(24, band * 0.58))
-
-  const linePoints = average.map((v, i) => (v == null ? null : [centre(i), y(v)]))
-  let d = ''
-  linePoints.forEach((p, i) => {
-    if (!p) return
-    d += `${linePoints[i - 1] ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`
-  })
-  const lastAvgIndex = average.findLastIndex((v) => v != null)
   const bandAt = (e) => Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left - PAD.left) / band)
   const [index, handlers] = useDayChart(rows, bandAt, onPick)
 
@@ -233,29 +226,15 @@ export function DailyActiveChart({ rows, average, label, picked = null, onPick }
       >
         {width > 0 && (
           <svg width={width} height={height} aria-hidden="true" className="block overflow-visible">
-            <defs>
-              {/* In user space: a flat line has no height, and a box-relative region would hide it. */}
-              <filter id={glow} filterUnits="userSpaceOnUse" x="0" y="0" width={width} height={height}>
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
             <YGrid ticks={ticks} y={y} width={width} />
             {rows.map((r, i) => (
               <path
                 key={r.day}
                 d={barPath(centre(i) - barW / 2, y(r.active), barW, y(0) - y(r.active))}
-                fill={index === i ? 'rgba(196, 232, 120, 0.55)' : picked && isPicked(r.day, picked) ? DAILY_PICKED : DAILY}
-                opacity={isPicked(r.day, picked) || index === i ? 1 : 0.4}
+                fill={index === i ? LIME_HOVER : LIME}
+                opacity={index === i || isPicked(r.day, picked) ? 1 : 0.3}
               />
             ))}
-            {d && <path d={d} fill="none" stroke={LIME} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" filter={`url(#${glow})`} />}
-            {lastAvgIndex >= 0 && (
-              <circle cx={centre(lastAvgIndex)} cy={y(average[lastAvgIndex])} r="4" fill={LIME} stroke={SURFACE} strokeWidth="2" />
-            )}
             {hovered && (
               <line x1={centre(index)} x2={centre(index)} y1={PAD.top} y2={height - PAD.bottom} stroke="rgba(255,255,255,0.35)" strokeWidth="1" />
             )}
@@ -271,14 +250,7 @@ export function DailyActiveChart({ rows, average, label, picked = null, onPick }
         y={8}
         width={width}
         title={hovered ? fmtDay(hovered.day, { weekday: 'short', day: 'numeric', month: 'short' }) : ''}
-        rows={
-          hovered
-            ? [
-                { label: plural(fmtInt(hovered.active), 'learner that day', 'learners that day'), value: fmtInt(hovered.active), color: DAILY },
-                ...(average[index] != null ? [{ label: '7-day average', value: fmtLearners(average[index]), color: LIME }] : []),
-              ]
-            : []
-        }
+        rows={hovered ? [{ label: plural(fmtInt(hovered.active), 'learner that day', 'learners that day'), value: fmtInt(hovered.active), color: LIME }] : []}
       />
     </div>
   )
@@ -366,11 +338,12 @@ export function PaceMixChart({ rows, label, picked = null, onPick }) {
 }
 
 /**
- * Where learners are: a column for each week of the course, as tall as the
- * learners a day in it on average (lime, its value on the cap), and under it,
- * where counted, a strip split by how that week's learners were pacing.
+ * Where learners are: a column for each week of the course, as tall as its
+ * exact count (lime, the count on the cap): learner-days over the days shown,
+ * or learners on a single day (`unit` names which). Under it, where counted,
+ * a strip split by how that week's learners were pacing.
  */
-export function WeeksChart({ weeks, label }) {
+export function WeeksChart({ weeks, label, unit = ['learner-day', 'learner-days'] }) {
   const [ref, width] = useWidth()
   const [index, setIndex, onKeyDown] = useKeyedIndex(weeks.length)
   const height = 200
@@ -380,7 +353,7 @@ export function WeeksChart({ weeks, label }) {
   const centre = (i) => pad.left + band * (i + 0.5)
   const barW = Math.max(1, Math.min(24, band * 0.58))
   const plotH = height - pad.top - pad.bottom
-  const max = Math.max(1e-9, ...weeks.map((w) => w.avg))
+  const max = Math.max(1, ...weeks.map((w) => w.count))
   const y = (v) => pad.top + plotH - (v / max) * plotH
   const base = y(0)
   const STRIP = 6
@@ -414,10 +387,10 @@ export function WeeksChart({ weeks, label }) {
               let left = x
               return (
                 <g key={w.week} opacity={index == null || index === i ? 1 : 0.5}>
-                  {w.avg > 0 && <path d={barPath(x, y(w.avg), barW, base - y(w.avg))} fill={LIME} />}
-                  {w.avg > 0 && band >= 22 && (
-                    <text x={centre(i)} y={y(w.avg) - 6} textAnchor="middle" className="fill-[#E8ECFA] text-[10px] font-semibold">
-                      {fmtLearners(w.avg)}
+                  {w.count > 0 && <path d={barPath(x, y(w.count), barW, base - y(w.count))} fill={LIME} />}
+                  {w.count > 0 && band >= 22 && (
+                    <text x={centre(i)} y={y(w.count) - 6} textAnchor="middle" className="fill-[#E8ECFA] text-[10px] font-semibold">
+                      {fmtInt(w.count)}
                     </text>
                   )}
                   {total > 0 &&
@@ -446,11 +419,11 @@ export function WeeksChart({ weeks, label }) {
           !hovered
             ? []
             : [
-            { label: plural(fmtLearners(hovered.avg), 'learner a day', 'learners a day'), value: hovered.avg > 0 ? fmtLearners(hovered.avg) : '0', color: LIME },
+            { label: plural(fmtInt(hovered.count), unit[0], unit[1]), value: fmtInt(hovered.count), color: LIME },
             ...(paceTotal(hovered.pace) > 0
               ? [...PACE_ORDER].reverse().map((k) => ({
-                  label: PACE[k].label.toLowerCase(),
-                  value: fmtPct(hovered.pace[k] / paceTotal(hovered.pace)),
+                  label: `${PACE[k].label.toLowerCase()} (${fmtPct(hovered.pace[k] / paceTotal(hovered.pace))})`,
+                  value: fmtInt(hovered.pace[k]),
                   color: PACE[k].color,
                 }))
               : []),

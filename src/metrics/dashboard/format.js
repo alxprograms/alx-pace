@@ -2,13 +2,6 @@
 
 export const fmtInt = (n) => Math.round(n).toLocaleString('en-GB')
 
-/**
- * A number of learners. Learners are people, so it is whole, averages too
- * ("about 3 a day", never 2.9); one that would round to 0 although learners
- * were counted reads "<1".
- */
-export const fmtLearners = (n) => (n > 0 && n < 0.5 ? '<1' : fmtInt(n))
-
 export const fmtPct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`)
 
 export const fmtDay = (day, opts = { day: 'numeric', month: 'short' }) =>

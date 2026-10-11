@@ -203,9 +203,10 @@ const share = (part, whole) => (whole > 0 ? part / whole : null)
 export const byWeek = (a, b) => Number(a) - Number(b)
 
 /**
- * A stretch of days summed up: average daily active learners, learner-days,
- * the pace mix, installed share, where learners are by week, and the same by
- * week and pace where the combined events have been counted.
+ * A stretch of days summed up, in exact counts: learner-days (one learner on
+ * one day), the busiest day, the pace mix, installed share, where learners
+ * are by week, and the same by week and pace where the combined events have
+ * been counted.
  */
 export function summarize(rows) {
   const n = rows.length
@@ -231,7 +232,6 @@ export function summarize(rows) {
     visits: sum(rows, (r) => r.visits ?? 0),
     paths,
     learnerDays,
-    avgActive: n > 0 ? learnerDays / n : 0,
     peak: peak && peak.active > 0 ? { day: peak.day, active: peak.active } : null,
     status: statusTotals,
     statusShare: Object.fromEntries(STATUSES.map((s) => [s, share(statusTotals[s], statusAll)])),
@@ -315,16 +315,6 @@ export function visitKinds(paths) {
   return kinds
 }
 
-/** The trailing average of `pick` over `window` days, null until the window is full. */
-export function movingAverage(rows, pick, window = 7) {
-  return rows.map((_, i) => {
-    if (i + 1 < window) return null
-    let total = 0
-    for (let j = i + 1 - window; j <= i; j++) total += pick(rows[j])
-    return total / window
-  })
-}
-
 /** The change from `before` to `after` as a fraction (0.12 = +12%); null with nothing before. */
 export const change = (after, before) => (before > 0 ? (after - before) / before : null)
 
@@ -341,18 +331,20 @@ export function weeklyDigest(days, today, program = 'da') {
   const topWeeks = Object.entries(week.weeks)
     .sort(([wa, a], [wb, b]) => b - a || byWeek(wa, wb))
     .slice(0, 3)
-    .map(([w, learnerDays]) => ({ week: w, avg: learnerDays / 7 }))
+    .map(([w, learnerDays]) => ({ week: w, learnerDays }))
   return {
     from,
     to,
     program,
     visits: week.visits,
     visitsChange: change(week.visits, prior.visits),
-    avgActive: week.avgActive,
-    avgActiveChange: change(week.avgActive, prior.avgActive),
     learnerDays: week.learnerDays,
+    learnerDaysChange: change(week.learnerDays, prior.learnerDays),
     peak: week.peak,
+    status: week.status,
     statusShare: week.statusShare,
+    installed: week.installed,
+    browser: week.browser,
     installedShare: week.installedShare,
     topWeeks,
     hasData: week.learnerDays > 0 || week.opens > 0,

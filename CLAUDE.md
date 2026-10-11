@@ -256,8 +256,12 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
   `?range=7|30|90|all` or `?from=&to=` days, clamped to the days on record.
   The Slack digest's button links its week that way.
 - Visits lead the page and the digest: GoatCounter's own count (every path's
-  visits, events included), which is what its dashboard shows. Learners are
-  people, so every learner figure is a whole number (`fmtLearners`).
+  visits, events included), which is what its dashboard shows.
+- Every number on the page and in the digest is an exact count, never an
+  average: learners on one day, learner-days (one learner on one day) over
+  several. Unique learners over several days can't be counted, since nothing
+  identifies a learner from one day to the next; don't label learner-days as
+  learners. `metrics.test.js` fails on a decimal in the digest.
 - `?data=<url>` points the page at another file, under `npm run dev` only.
   `scripts/metrics/sample.mjs` makes one; README has the commands.
 

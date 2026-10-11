@@ -6,10 +6,10 @@ import portrait4 from '../../assets/alx/banner-img4.webp'
 import portrait5 from '../../assets/alx/banner-img5.webp'
 import logo from '../../assets/alx/header-logo.svg'
 import { APP_URL, DATA_URL } from '../config.js'
-import { addDays, byWeek, change, daysBetween, mostBehindWeek, movingAverage, readFile, series, shownVisits, summarize, visitKinds, weekdayPattern, STATUSES } from '../model.js'
+import { addDays, byWeek, change, mostBehindWeek, readFile, series, shownVisits, summarize, visitKinds, weekdayPattern, STATUSES } from '../model.js'
 import { DailyActiveChart, Legend, MeterDial, PaceDial, PaceMixChart, Sparkline, WeeksChart } from './charts.jsx'
-import { fmtChange, fmtDay, fmtInt, fmtLearners, fmtPct } from './format.js'
-import { DAILY, LIME, PACE, PACE_ORDER } from './palette.js'
+import { fmtChange, fmtDay, fmtInt, fmtPct } from './format.js'
+import { LIME, PACE, PACE_ORDER } from './palette.js'
 import { chartWindow, pickDate, resolveRange, searchForSelection, selectionFromSearch } from './range.js'
 
 /*
@@ -28,6 +28,10 @@ import { chartWindow, pickDate, resolveRange, searchForSelection, selectionFromS
 
   Visits lead the page: GoatCounter's own count, the number its dashboard
   shows, with what it is written beside it.
+
+  Every number is an exact count, never an average: learners are people. Over
+  one day that is learners; over several, learner-days (one learner on one
+  day), since nothing tells the same learner apart from one day to the next.
 */
 
 const PORTRAITS = [portrait1, portrait2, portrait3, portrait4, portrait5]
@@ -292,6 +296,26 @@ function changeWords(x) {
 
 const Em = ({ children }) => <strong className="font-semibold text-white">{children}</strong>
 
+/** "1 learner", "1,204 learners": a count and its noun. */
+const plural = (n, one, many) => `${fmtInt(n)} ${n === 1 ? one : many}`
+
+/** "Week 4", "Weeks 4 and 5", "Weeks 3, 4 and 5". */
+function weekList(weeks) {
+  const names = weeks.map((w) => w.week)
+  if (names.length === 1) return `Week ${names[0]}`
+  return `Weeks ${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+}
+
+/** "behind 64 (23%), on track 200 (70%) and ahead 20 (7%)": a pace mix in counts. */
+function PaceCounts({ counts, shares }) {
+  return PACE_ORDER.map((k, i) => (
+    <span key={k}>
+      {i > 0 && (i === PACE_ORDER.length - 1 ? ' and ' : ', ')}
+      {PACE[k].label.toLowerCase()} <Em>{fmtInt(counts[k])}</Em> ({fmtPct(shares[k])})
+    </span>
+  ))
+}
+
 function Report({ file, view, bounds, onSelect }) {
   const { from, to, length } = view
   const data = useMemo(() => {
@@ -299,28 +323,19 @@ function Report({ file, view, bounds, onSelect }) {
     const rows = series(file.days, from, to, PROGRAM)
     const prior = summarize(series(file.days, addDays(from, -length), addDays(from, -1), PROGRAM))
     // The day-by-day charts: the days picked, or for under a week, the days
-    // around them (range.js), with an average line that takes the six days
-    // before so it starts on the first column, but only days on record:
-    // before the first one it waits for seven rather than count zeros.
+    // around them (range.js).
     const win = chartWindow({ from, to, length }, first, bounds.last)
     const chartRows = series(file.days, win.from, win.to, PROGRAM)
-    const leadFrom = addDays(win.from, -6) < first ? first : addDays(win.from, -6)
-    const lead = series(file.days, leadFrom, win.to, PROGRAM)
-    const chartAverage = movingAverage(lead, (r) => r.active).slice(daysBetween(leadFrom, win.from))
-    const offset = daysBetween(win.from, from)
-    const average = chartAverage.slice(offset, offset + length)
     const s = summarize(rows)
     const weekKeys = [...new Set([...DA_WEEKS, ...Object.keys(s.weeks)])].sort(byWeek)
-    const weeks = weekKeys.map((w) => ({
-      week: w,
-      avg: (s.weeks[w] ?? 0) / rows.length,
-      pace: s.weekStatus[w] ?? null,
-    }))
+    const weeks = weekKeys.map((w) => ({ week: w, count: s.weeks[w] ?? 0, pace: s.weekStatus[w] ?? null }))
     const paceFrom = rows.find((r) => Object.keys(r.weekStatus).length > 0)?.day ?? null
     // A comparison needs the whole period before to be on record: days before
     // the first one read as zero, and "↑ 881%" against them says nothing.
     const hasPrior = addDays(from, -length) >= first
-    return { rows, average, s, prior, weeks, paceFrom, hasPrior, win, chartRows, chartAverage }
+    const weekAgo = addDays(from, -7)
+    const weekBefore = weekAgo >= first ? series(file.days, weekAgo, weekAgo, PROGRAM)[0].active : null
+    return { rows, s, prior, weeks, paceFrom, hasPrior, weekBefore, win, chartRows }
   }, [file, from, to, length, bounds.first, bounds.last])
 
   const { s, prior, rows, win } = data
@@ -335,22 +350,31 @@ function Report({ file, view, bounds, onSelect }) {
   const priorPaceAll = STATUSES.reduce((a, k) => a + prior.status[k], 0)
   // Days with learners but no pace counted, left out of the pace shares.
   const unpaced = rows.filter((r) => r.active > 0 && STATUSES.every((k) => r.status[k] === 0)).length
+  // Days whose paces don't add up to their learners: older versions of the
+  // app sent pace as an event of its own, which GoatCounter counted apart
+  // from the week (readDay in model.js).
+  const paceApart = rows.some((r) => {
+    const paces = STATUSES.reduce((a, k) => a + r.status[k], 0)
+    return paces > 0 && paces !== r.active
+  })
   const rhythm = weekdayPattern(rows)
-  const topWeek = data.weeks.reduce((best, w) => (w.avg > (best?.avg ?? 0) ? w : best), null)
+  // The week or weeks with the most learners; a tie names them all.
+  const topCount = Math.max(0, ...data.weeks.map((w) => w.count))
+  const topWeeks = topCount > 0 ? data.weeks.filter((w) => w.count === topCount) : []
   const behindWeek = data.paceFrom ? mostBehindWeek(s.weekStatus) : null
-  const activeChange = data.hasPrior ? change(s.avgActive, prior.avgActive) : null
+  const learnersChange = data.hasPrior ? change(s.learnerDays, prior.learnerDays) : null
   const visitsChange = data.hasPrior ? change(s.visits, prior.visits) : null
   // "Compared with" only when something on the page is.
-  const compared = activeChange != null || visitsChange != null || (data.hasPrior && priorPaceAll > 0)
+  const compared = learnersChange != null || visitsChange != null || (data.hasPrior && priorPaceAll > 0)
   const peakDays = s.peak ? rows.filter((r) => r.active === s.peak.active).length : 0
-  const avgText = fmtLearners(s.avgActive)
+  const learnersText = oneDay ? plural(s.learnerDays, 'learner', 'learners') : plural(s.learnerDays, 'learner-day', 'learner-days')
   const shown = shownVisits(s.paths, GOATCOUNTER_LISTED)
   const kinds = visitKinds(s.paths)
   const picked = win.context ? { from, to } : null
   const pickDay = (day) => onSelect({ from: day, to: day })
   const chartHint = win.context
     ? `The chart shows the days around ${oneDay ? 'it' : 'them'}; ${oneDay ? 'its column is' : 'theirs are'} the bright ${oneDay ? 'one' : 'ones'}.`
-    : 'Each column is a day; the lime line is the 7-day average, which smooths out the weekly rhythm.'
+    : 'Each column is a day, as tall as that day’s learners.'
   const updated = file.updatedAt
     ? new Date(file.updatedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' })
     : null
@@ -416,12 +440,12 @@ function Report({ file, view, bounds, onSelect }) {
 
       <section className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="Figures at a glance">
         <div className="pulse-card flex min-w-0 flex-col sm:col-span-2 lg:col-span-1">
-          <p className="pulse-label">{oneDay ? 'Active learners' : 'Active learners a day'}</p>
+          <p className="pulse-label">{oneDay ? 'Active learners' : 'Learner-days'}</p>
           <div className="mt-4 flex items-end gap-3">
-            <p className="text-6xl font-semibold leading-none tracking-tight text-white">{avgText}</p>
-            <Delta value={activeChange} />
+            <p className="text-6xl font-semibold leading-none tracking-tight text-white">{fmtInt(s.learnerDays)}</p>
+            <Delta value={learnersChange} />
           </div>
-          <p className="mt-2 text-xs text-[#A9B3D6]">{oneDay ? `On ${dayName(from)}` : `On average, ${period}`}</p>
+          <p className="mt-2 text-xs text-[#A9B3D6]">{oneDay ? `On ${dayName(from)}` : `Each learner counted once for every day they opened Pace, ${period}`}</p>
           {!oneDay && (
             <div className="mt-auto pt-6">
               <Sparkline values={rows.map((r) => r.active)} height={64} />
@@ -435,21 +459,25 @@ function Report({ file, view, bounds, onSelect }) {
                   <dd className="mt-1 text-xl font-semibold text-white">{data.hasPrior ? fmtInt(prior.learnerDays) : '–'}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-[#A9B3D6]">7-day average</dt>
-                  <dd className="mt-1 text-xl font-semibold text-white">{data.average[0] == null ? '–' : fmtLearners(data.average[0])}</dd>
+                  <dt className="text-xs text-[#A9B3D6]">A week before</dt>
+                  <dd className="mt-1 text-xl font-semibold text-white">{data.weekBefore == null ? '–' : fmtInt(data.weekBefore)}</dd>
                 </div>
               </>
             ) : (
               <>
                 <div>
-                  <dt className="text-xs text-[#A9B3D6]">Learner-days</dt>
-                  <dd className="mt-1 text-xl font-semibold text-white">{fmtInt(s.learnerDays)}</dd>
-                </div>
-                <div>
                   <dt className="text-xs text-[#A9B3D6]">Busiest day</dt>
                   <dd className="mt-1 text-xl font-semibold text-white">
                     {s.peak ? fmtInt(s.peak.active) : '–'}
-                    {s.peak && <span className="ms-2 text-xs font-normal text-[#A9B3D6]">{fmtDay(s.peak.day, { weekday: 'short', day: 'numeric', month: 'short' })}</span>}
+                    {s.peak && ' '}
+                    {s.peak && <span className="ms-1 text-xs font-normal text-[#A9B3D6]">{peakDays === 1 ? fmtDay(s.peak.day, { weekday: 'short', day: 'numeric', month: 'short' }) : `${peakDays} days`}</span>}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[#A9B3D6]">Last day</dt>
+                  <dd className="mt-1 text-xl font-semibold text-white">
+                    {fmtInt(rows.at(-1).active)}{' '}
+                    <span className="ms-1 text-xs font-normal text-[#A9B3D6]">{fmtDay(to, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                   </dd>
                 </div>
               </>
@@ -470,7 +498,10 @@ function Report({ file, view, bounds, onSelect }) {
                   <span aria-hidden="true" className="h-2.5 w-2.5 rounded-[3px]" style={{ background: PACE[k].color }} />
                   {PACE[k].label}
                 </p>
-                <p className="mt-1 text-xl font-semibold text-white">{fmtPct(s.statusShare[k])}</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {fmtInt(s.status[k])}{' '}
+                  <span className="ms-0.5 text-xs font-normal text-[#A9B3D6]">{fmtPct(s.statusShare[k])}</span>
+                </p>
               </li>
             ))}
           </ul>
@@ -507,13 +538,18 @@ function Report({ file, view, bounds, onSelect }) {
             </>
           ) : (
             <>
-              <p>
-                <Em>
-                  {avgText === '<1' ? 'Fewer than 1 learner' : `${avgText} ${avgText === '1' ? 'learner' : 'learners'}`}
-                </Em>{' '}
-                opened Pace {oneDay ? period : `on an average day ${period}`}
-                {activeChange != null && `, ${changeWords(activeChange)} ${versus}`}.
-              </p>
+              {oneDay ? (
+                <p>
+                  <Em>{learnersText}</Em> opened Pace {period}
+                  {learnersChange != null && `, ${changeWords(learnersChange)} ${versus}`}.
+                </p>
+              ) : (
+                <p>
+                  Learners opened Pace on <Em>{learnersText}</Em> {period}
+                  {learnersChange != null && `, ${changeWords(learnersChange)} ${versus}`}. A learner-day is one learner on one day, however
+                  often they opened it.
+                </p>
+              )}
               {!oneDay &&
                 s.peak &&
                 (peakDays === 1 ? (
@@ -552,15 +588,9 @@ function Report({ file, view, bounds, onSelect }) {
         <ChartCard
           title="Active learners per day"
           subtitle="Each learner counted once a day"
-          legend={<Legend items={[{ label: 'Learners that day', color: DAILY }, { label: '7-day average', color: LIME, line: true }]} />}
-          table={
-            <DataTable
-              head={['Day', 'Learners', '7-day average']}
-              rows={rows.map((r, i) => [fmtDay(r.day, { weekday: 'short', day: 'numeric', month: 'short' }), fmtInt(r.active), data.average[i] == null ? '–' : fmtLearners(data.average[i])])}
-            />
-          }
+          table={<DataTable head={['Day', 'Learners']} rows={rows.map((r) => [fmtDay(r.day, { weekday: 'short', day: 'numeric', month: 'short' }), fmtInt(r.active)])} />}
         >
-          <DailyActiveChart rows={data.chartRows} average={data.chartAverage} picked={picked} onPick={pickDay} label="Active learners per day, with the 7-day average" />
+          <DailyActiveChart rows={data.chartRows} picked={picked} onPick={pickDay} label="Active learners per day" />
         </ChartCard>
       </Question>
 
@@ -577,8 +607,7 @@ function Report({ file, view, bounds, onSelect }) {
           ) : (
             <>
               <p>
-                {oneDay ? 'Of that day’s learners' : 'Counting each learner once a day'}, <Em>{fmtPct(s.statusShare.behind)}</Em> were behind,{' '}
-                <Em>{fmtPct(s.statusShare['on-track'])}</Em> on track and <Em>{fmtPct(s.statusShare.ahead)}</Em> ahead.
+                {oneDay ? 'Pace that day' : 'Pace, counting each learner once a day'}: <PaceCounts counts={s.status} shares={s.statusShare} />.
               </p>
               {data.hasPrior && priorPaceAll > 0 && (
                 <p>
@@ -594,6 +623,12 @@ function Report({ file, view, bounds, onSelect }) {
                 </p>
               )}
               {!oneDay && unpaced > 0 && <UnpacedNote days={unpaced} />}
+              {paceApart && (
+                <p>
+                  {oneDay ? 'These add' : 'On some days these add'} up to a little more or less than the learners: versions of the app before
+                  11 October sent pace as an event of its own, which GoatCounter counted apart from the week.
+                </p>
+              )}
               <p className="text-[#8A95BF]">A learner who is behind sees their oldest overdue lessons first when they open Pace.</p>
             </>
           )
@@ -619,21 +654,14 @@ function Report({ file, view, bounds, onSelect }) {
         kicker="Progress"
         title="Where in the course are learners?"
         text={
-          !topWeek ? (
+          topWeeks.length === 0 ? (
             <p>No learner was counted in a week of the course {oneDay ? 'that day' : 'in these days'}.</p>
           ) : (
             <>
               <p>
-                {oneDay ? (
-                  <>
-                    The most learners were in <Em>Week {topWeek.week}</Em>: <Em>{fmtInt(topWeek.avg)}</Em>.
-                  </>
-                ) : (
-                  <>
-                    The most learners are in <Em>Week {topWeek.week}</Em>,{' '}
-                    {fmtLearners(topWeek.avg) === '<1' ? 'though fewer than 1 a day' : <>about <Em>{fmtLearners(topWeek.avg)}</Em> a day</>}.
-                  </>
-                )}
+                <Em>{weekList(topWeeks)}</Em> had the most: <Em>{oneDay ? plural(topCount, 'learner', 'learners') : plural(topCount, 'learner-day', 'learner-days')}</Em>
+                {topWeeks.length > 1 && ' each'}
+                {oneDay ? '' : ` ${period}`}.
               </p>
               {behindWeek && (
                 <p>
@@ -649,24 +677,28 @@ function Report({ file, view, bounds, onSelect }) {
         }
       >
         <ChartCard
-          title={oneDay ? 'Learners in each week' : 'Learners a day in each week'}
-          subtitle="The week each learner is in, by the course calendar"
+          title={oneDay ? 'Learners in each week' : 'Learner-days in each week'}
+          subtitle={oneDay ? 'The week each learner is in, by the course calendar' : 'The week each learner is in, by the course calendar, counted once a day'}
           legend={
             <Legend
               items={[
-                { label: oneDay ? 'Learners' : 'Learners a day', color: LIME },
+                { label: oneDay ? 'Learners' : 'Learner-days', color: LIME },
                 ...(data.paceFrom ? PACE_ORDER.map((k) => ({ label: PACE[k].label, color: PACE[k].color })) : []),
               ]}
             />
           }
           table={
             <DataTable
-              head={['Week', oneDay ? 'Learners' : 'Learners a day', 'Behind', 'On track', 'Ahead']}
-              rows={data.weeks.map((w) => [`Week ${w.week}`, w.avg > 0 ? fmtLearners(w.avg) : '–', ...PACE_ORDER.map((k) => (w.pace ? fmtInt(w.pace[k]) : '–'))])}
+              head={['Week', oneDay ? 'Learners' : 'Learner-days', 'Behind', 'On track', 'Ahead']}
+              rows={data.weeks.map((w) => [`Week ${w.week}`, w.count > 0 ? fmtInt(w.count) : '–', ...PACE_ORDER.map((k) => (w.pace ? fmtInt(w.pace[k]) : '–'))])}
             />
           }
         >
-          <WeeksChart weeks={data.weeks} label={oneDay ? 'Learners in each week of the course' : 'Learners a day in each week of the course'} />
+          <WeeksChart
+            weeks={data.weeks}
+            unit={oneDay ? ['learner', 'learners'] : ['learner-day', 'learner-days']}
+            label={oneDay ? 'Learners in each week of the course' : 'Learner-days in each week of the course'}
+          />
         </ChartCard>
       </Question>
     </>
@@ -781,6 +813,11 @@ function Footer() {
           day, counted once however often it was opened.
         </li>
         <li>Learners whose browser asks not to be tracked (Do Not Track, Global Privacy Control) are not counted, so these are a floor.</li>
+        <li>
+          A learner-day is one learner on one day. Over several days the page counts learner-days, not different learners: nothing identifies a
+          learner from one day to the next, so one learner on five days can’t be told apart from five learners on one day each.
+        </li>
+        <li>Every number is an exact count. Nothing is averaged: learners are people, and an average of people is never a whole number.</li>
         <li>Week is the learner’s week by the course calendar, from their start date; pace is worked out from the lessons they have ticked.</li>
         <li>A visit is GoatCounter’s count: every page view and event it recorded (see “What a visit is”, above).</li>
       </ul>
