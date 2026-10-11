@@ -30,9 +30,9 @@ export function digestMessage(d) {
   // Visits first: GoatCounter's own number, every visit since counting
   // began, as its page shows over all its days; then the week's share.
   const since = d.since ? fmtDay(d.since, { day: 'numeric', month: 'short', year: 'numeric' }) : null
-  // "So far" only when the numbers reach the week's end; a stopped collection
+  // "So far" only when the numbers reach yesterday; a stopped collection
   // says where they stop.
-  const stopped = d.through && d.through < d.to ? fmtDay(d.through, { day: 'numeric', month: 'short', year: 'numeric' }) : null
+  const stopped = d.through && d.through < d.asOf ? fmtDay(d.through, { day: 'numeric', month: 'short', year: 'numeric' }) : null
   const soFar = stopped ? `to ${stopped}` : 'so far'
   const total = since ? `*${fmtInt(d.visitsTotal)}* visits on GoatCounter ${soFar}, since counting began on ${since}` : null
 

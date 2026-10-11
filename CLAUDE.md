@@ -259,8 +259,9 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
   The Slack digest's button links its week that way.
 - Visits lead the page and the digest: GoatCounter's own count (every path's
   visits, events included), which is what its dashboard shows. The digest
-  leads with the running total since counting began, to the week's Sunday,
-  then the week's share; the page counts the days picked.
+  leads with the running total since counting began, to the day before it
+  posts (the week's Sunday, on a Monday), then the week's own visits; the
+  page counts the days picked.
 - Every number on the page and in the digest is an exact count, never an
   average: learners on one day, learner-days (one learner on one day) over
   several. Unique learners over several days can't be counted, since nothing

@@ -329,12 +329,12 @@ describe('the Monday digest', () => {
     expect(JSON.stringify(digestMessage(weeklyDigest(one, '2026-08-17')).blocks)).toContain('Busiest day*\\nWednesday 12 Aug, 1 learner"')
   })
 
-  it('leads with every visit since counting began, to the end of the week, and the week’s share', () => {
+  it('leads with every visit since counting began, to yesterday, and the week’s share', () => {
     // Counting began on 28 Sept: 210 visits that week, 350 in the digest's week.
     const d = weeklyDigest(days, '2026-10-12')
     expect(d.since).toBe('2026-09-28')
     expect(d.visitsTotal).toBe(210 + 350)
-    // A day after the digest's week, collected by Monday's run, is not in its total.
+    // Monday so far, collected by Monday's morning run, is not in its total: it isn't over.
     expect(weeklyDigest({ ...days, '2026-10-12': { '/': 40 } }, '2026-10-12').visitsTotal).toBe(560)
     const lines = digestMessage(d).blocks[1].text.text.split('\n')
     expect(lines.slice(0, 2)).toEqual(['*560* visits on GoatCounter so far, since counting began on 28 Sept 2026', '*350* visits this week (↑ 67% on the week before)'])
@@ -342,6 +342,17 @@ describe('the Monday digest', () => {
     const earlier = weeklyDigest({ ...days, '2026-09-14': { '/': 5 } }, '2026-10-12')
     expect([earlier.since, earlier.visitsTotal]).toEqual(['2026-09-14', 565])
     expect(digestMessage(earlier).blocks[1].text.text.split('\n')[0]).toBe('*565* visits on GoatCounter so far, since counting began on 14 Sept 2026')
+  })
+
+  it('counts every day so far when posted after the Monday, or again by hand', () => {
+    // Run by hand on Sunday 11 Oct: the week is the last full one, 28 Sept – 4 Oct,
+    // but the total runs to Saturday 10 Oct, every visit so far.
+    const d = weeklyDigest(days, '2026-10-11')
+    expect([d.from, d.to, d.visits]).toEqual(['2026-09-28', '2026-10-04', 210])
+    expect([d.asOf, d.through, d.visitsTotal]).toEqual(['2026-10-10', '2026-10-10', 210 + 350 - 48])
+    const msg = digestMessage(d)
+    expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*512* visits on GoatCounter so far, since counting began on 28 Sept 2026')
+    expect(JSON.stringify(msg)).toContain('counted from 28 Sept 2026 to Saturday 10 Oct')
   })
 
   it('says where the total stops, not "so far", when collecting stopped before the week ended', () => {
