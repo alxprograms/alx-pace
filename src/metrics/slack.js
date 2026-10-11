@@ -27,6 +27,11 @@ export function digestMessage(d) {
   const program = PROGRAM_NAMES[d.program] ?? d.program
   const title = `ALX Pace · ${program} · week of ${range}`
 
+  // Visits first: GoatCounter's own number, every visit since counting
+  // began, as its page shows over all its days; then the week's share.
+  const since = d.since ? fmtDay(d.since, { day: 'numeric', month: 'short', year: 'numeric' }) : null
+  const total = since ? `*${fmtInt(d.visitsTotal)}* visits on GoatCounter so far, since counting began on ${since}` : null
+
   if (!d.hasData) {
     return {
       text: `${title}: no learner activity was counted.`,
@@ -36,7 +41,10 @@ export function digestMessage(d) {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: 'No learner activity was counted this week. If the app was used, check the metrics job in GitHub Actions.',
+            text: [
+              'No learner activity was counted this week. If the app was used, check the metrics job in GitHub Actions.',
+              ...(total && d.visitsTotal > 0 ? [total] : []),
+            ].join('\n'),
           },
         },
         link(d),
@@ -44,12 +52,16 @@ export function digestMessage(d) {
     }
   }
 
-  // Visits first: GoatCounter's own number, the one its dashboard shows.
   // Every number is a count, never an average: learners are people.
   const headline = [
-    `*${fmtInt(d.visits)}* visits on GoatCounter (${signed(d.visitsChange)})`,
-    `*${fmtInt(d.learnerDays)}* learner-days: each learner counted once for each day they opened Pace (${signed(d.learnerDaysChange)})`,
-  ].join('\n')
+    total,
+    // GoatCounter's "N out of M visits shown": its top 10 paths, out of them all.
+    d.visitsTotalShown < d.visitsTotal && `${fmtInt(d.visitsTotalShown)} out of ${fmtInt(d.visitsTotal)} visits shown, as GoatCounter lists its top 10 paths`,
+    `*${fmtInt(d.visits)}* of them this week (${signed(d.visitsChange)})`,
+    `*${fmtInt(d.learnerDays)}* learner-days this week: each learner counted once for each day they opened Pace (${signed(d.learnerDaysChange)})`,
+  ]
+    .filter(Boolean)
+    .join('\n')
   const pace = STATUS_LINE(d.status, d.statusShare)
   const busiest = d.topWeeks.length ? d.topWeeks.map((w) => `${weekLabel(w.week)}: ${fmtInt(w.learnerDays)}`).join(' · ') : '–'
   const peakLearners = `${fmtInt(d.peak?.active ?? 0)} ${d.peak?.active === 1 ? 'learner' : 'learners'}`
@@ -60,7 +72,7 @@ export function digestMessage(d) {
       : `${fmtDay(d.peak.day, { weekday: 'long', day: 'numeric', month: 'short' })}, ${peakLearners}`
 
   return {
-    text: `${title}: ${fmtInt(d.visits)} visits, ${fmtInt(d.learnerDays)} learner-days`,
+    text: `${title}: ${fmtInt(d.visitsTotal)} visits so far (${fmtInt(d.visits)} this week), ${fmtInt(d.learnerDays)} learner-days`,
     blocks: [
       { type: 'header', text: { type: 'plain_text', text: title } },
       { type: 'section', text: { type: 'mrkdwn', text: headline } },
@@ -79,7 +91,7 @@ export function digestMessage(d) {
         elements: [
           {
             type: 'mrkdwn',
-            text: 'Visits are every page view and event GoatCounter recorded; a learner-day is one learner on one day they opened Pace. The dashboard explains both. Learners who opt out of tracking are not counted.',
+            text: `Visits are every page view and event GoatCounter recorded, counted from ${since} to the end of this week; a learner-day is one learner on one day they opened Pace. The dashboard explains both. Learners who opt out of tracking are not counted.`,
           },
         ],
       },

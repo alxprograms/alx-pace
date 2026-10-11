@@ -162,7 +162,9 @@ numbers show without a deploy.
 
 The digest covers last Monday to Sunday and goes out on the Monday, after
 that morning's numbers are pushed, so its *Open the dashboard* button finds
-its week. If that run fails, or GitHub skips it, the next morning's run posts
+its week. It leads with every visit since counting began on 20 July, up to
+that Sunday (GoatCounter's running total, with its "N out of M visits shown"),
+then the week's share of them. If that run fails, or GitHub skips it, the next morning's run posts
 it instead: the last week posted is kept in `digest.json` beside the numbers.
 
 The dashboard is its own build (`vite.metrics.config.js`), run by `npm run
