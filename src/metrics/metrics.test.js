@@ -218,6 +218,10 @@ describe('a stretch of days', () => {
     expect(s.days).toBe(4)
     expect(s.learnerDays).toBe(30)
     expect(s.peak).toEqual({ day: '2026-10-06', active: 20 })
+    // Unique learners, as a range: at least the busiest day's 20, at most one per learner-day.
+    expect(s.unique).toEqual({ atLeast: 20, atMost: 30 })
+    // One day is exact.
+    expect(summarize(series(days, '2026-10-06', '2026-10-06')).unique).toEqual({ atLeast: 20, atMost: 20 })
     expect(s.statusShare.behind).toBeCloseTo(2 / 30)
     expect(s.installed).toBe(1)
     expect(s.browser).toBe(7)
@@ -401,6 +405,12 @@ describe('the Monday digest', () => {
     expect(all).toContain('On track 63 (75%) · Behind 21 (25%) · Ahead 0 (0%)')
     expect(all).toContain('Week 4: 63 · Week 5: 28')
     expect(all).toContain('Wednesday 7 Oct, 19 learners')
+    // Unique learners as a range, the week's and since counting began, and why there's no exact number.
+    const lines = msg.blocks[1].text.text.split('\n')
+    expect(lines).toContain('*19 to 91* unique learners this week')
+    expect(lines).toContain(
+      '*19 to 161* unique learners so far, since counting began: at least the most on any one day, at most one per learner-day. No exact count is possible, as nothing identifies a learner from one day to the next.',
+    )
     expect(all).toContain('App opens*\\n84 · 21 from the installed app (25%)')
     // The button opens the dashboard on the digest's own week.
     expect(msg.blocks.find((b) => b.type === 'actions').elements[0].url).toBe(`${DASHBOARD_URL}?from=2026-10-05&to=2026-10-11`)

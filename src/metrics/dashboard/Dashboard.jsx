@@ -504,6 +504,8 @@ function Report({ file, view, bounds, onSelect, askedPast }) {
         </div>
       </section>
 
+      <UniqueLearners unique={s.unique} oneDay={oneDay} period={period} peak={s.peak} peakDays={peakDays} dayName={dayName} />
+
       <section className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="Figures at a glance">
         <div className="pulse-card flex min-w-0 flex-col sm:col-span-2 lg:col-span-1">
           <p className="pulse-label">{oneDay ? 'Active learners' : 'Learner-days'}</p>
@@ -771,6 +773,81 @@ function Report({ file, view, bounds, onSelect, askedPast }) {
   )
 }
 
+/**
+ * How many different learners: exact over one day, a range over several,
+ * since nothing identifies a learner from one day to the next. At least the
+ * most on any one day, at most one per learner-day (summarize in model.js).
+ */
+function UniqueLearners({ unique, oneDay, period, peak, peakDays, dayName }) {
+  const { atLeast, atMost } = unique
+  const exact = atLeast === atMost
+  return (
+    <section className="pulse-card mt-5 grid gap-8 lg:grid-cols-12" aria-label="Unique learners">
+      <div className="min-w-0 lg:col-span-5">
+        <p className="pulse-label">Unique learners</p>
+        <p className="mt-4 text-6xl font-semibold leading-none tracking-tight text-white sm:text-7xl">
+          {exact ? (
+            fmtInt(atLeast)
+          ) : (
+            <>
+              {fmtInt(atLeast)}{' '}
+              <span className="mx-1 text-4xl font-normal text-[#8A95BF] sm:text-5xl">to</span>{' '}
+              {fmtInt(atMost)}
+            </>
+          )}
+        </p>
+        <p className="mt-3 text-sm text-[#A9B3D6]">
+          {atMost === 0
+            ? `No learners were counted ${oneDay ? 'that day' : 'in these days'}.`
+            : exact
+              ? `Exactly, ${period}: each learner is counted once a day.`
+              : `Somewhere in this range, ${period}. No exact count is possible.`}
+        </p>
+        {!exact && (
+          <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-white/[0.08] pt-4">
+            <div>
+              <dt className="text-xs text-[#A9B3D6]">At least</dt>
+              <dd className="mt-1 text-xl font-semibold text-white">
+                {fmtInt(atLeast)}{' '}
+                <span className="mt-0.5 block text-xs font-normal text-[#A9B3D6]">
+                  the most on one day{peak && peakDays === 1 ? `, ${fmtDay(peak.day, { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[#A9B3D6]">At most</dt>
+              <dd className="mt-1 text-xl font-semibold text-white">
+                {fmtInt(atMost)}{' '}
+                <span className="mt-0.5 block text-xs font-normal text-[#A9B3D6]">one per learner-day</span>
+              </dd>
+            </div>
+          </dl>
+        )}
+      </div>
+      <div className="min-w-0 lg:col-span-7 lg:border-s lg:border-white/[0.08] lg:ps-8">
+        <h3 className="text-sm font-semibold text-white">Why there is no exact number over several days</h3>
+        <div className="mt-3 space-y-3 text-sm leading-relaxed text-[#A9B3D6]">
+          <p>
+            Pace has no accounts and sends nothing that identifies a learner. Each day it counts the learners who opened it, once each, so a
+            single day’s count is exact. Across days the counts can’t be joined up: a learner who opened Pace on five days looks the same as five
+            learners who opened it once.
+          </p>
+          {exact ? (
+            <p>Pick more than one day and this becomes a range.</p>
+          ) : (
+            <p>
+              So the page gives a range. <Em>At least {fmtInt(atLeast)}</Em>: the most learners on any one day
+              {peak && peakDays === 1 ? <>, {dayName(peak.day)}</> : peakDays > 1 ? <>, reached on {peakDays} days</> : ''}, who were all different
+              people. <Em>At most {fmtInt(atMost)}</Em>: one learner for every learner-day. The true number is somewhere between.
+            </p>
+          )}
+          <p>A learner who uses Pace in two browsers, a phone and a laptop say, counts as two.</p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 /** One kind of visit, in the visits card. */
 function VisitKind({ label, value }) {
   return (
@@ -880,8 +957,8 @@ function Footer() {
         </li>
         <li>Learners whose browser asks not to be tracked (Do Not Track, Global Privacy Control) are not counted, so these are a floor.</li>
         <li>
-          A learner-day is one learner on one day. Over several days the page counts learner-days, not different learners: nothing identifies a
-          learner from one day to the next, so one learner on five days can’t be told apart from five learners on one day each.
+          A learner-day is one learner on one day. Over several days the page counts learner-days, and gives unique learners as a range: nothing
+          identifies a learner from one day to the next, so one learner on five days can’t be told apart from five learners on one day each.
         </li>
         <li>Every number is an exact count. Nothing is averaged: learners are people, and an average of people is never a whole number.</li>
         <li>Week is the learner’s week by the course calendar, from their start date; pace is worked out from the lessons they have ticked.</li>

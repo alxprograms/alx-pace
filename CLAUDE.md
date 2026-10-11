@@ -267,6 +267,11 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
   several. Unique learners over several days can't be counted, since nothing
   identifies a learner from one day to the next; don't label learner-days as
   learners. `metrics.test.js` fails on a decimal in the digest.
+- Unique learners are shown as a range (`summarize().unique`): at least the
+  most on any one day, at most the learner-days; exact over one day. Don't
+  publish a tighter floor worked out from start-date cohorts: learners can
+  change their start date (it defaults to today) and reappear in another
+  browser, so such a floor can overcount.
 - `?data=<url>` points the page at another file, under `npm run dev` only.
   `scripts/metrics/sample.mjs` makes one; README has the commands.
 
