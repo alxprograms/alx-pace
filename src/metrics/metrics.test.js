@@ -388,6 +388,22 @@ describe('fetching from GoatCounter', () => {
     expect(err.message).toContain('503')
   })
 
+  it('asks again after GoatCounter’s 404 on a key’s first request of the day, once', async () => {
+    // GoatCounter c031008: the first request with a key unused for 24 hours
+    // gets 404 {"error":"not found"}; the next one works.
+    let n = 0
+    const firstUse = async () => (++n === 1 ? { ok: false, status: 404, headers: { get: () => null }, text: async () => '{"error":"not found"}' } : page([], false))
+    await fetchDailyHits({ site: 's', token: 't', from: '2026-10-01', to: '2026-10-02', fetchImpl: firstUse, sleep: async () => {} })
+    expect(n).toBe(2)
+
+    let calls = 0
+    const wrongSite = async () => (calls++, { ok: false, status: 404, headers: { get: () => null }, text: async () => '{"error":"not found"}' })
+    const err = await fetchDailyHits({ site: 's', token: 't', from: 'a', to: 'b', fetchImpl: wrongSite, sleep: async () => {} }).catch((e) => e)
+    expect(calls).toBe(2)
+    expect(err).toBeInstanceOf(GoatCounterError)
+    expect(err.message).toContain('GOATCOUNTER_SITE')
+  })
+
   it('fails with GoatCounter’s own message on a bad key, without the token', async () => {
     const fetchImpl = async () => ({ ok: false, status: 401, headers: { get: () => null }, text: async () => '{"error":"invalid key"}' })
     const err = await fetchDailyHits({ site: 's', token: 'secret', from: 'a', to: 'b', fetchImpl, sleep: async () => {} }).catch((e) => e)
