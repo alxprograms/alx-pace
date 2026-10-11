@@ -160,9 +160,10 @@ The numbers live on their own `metrics` branch, never `main`: a commit to
 the real ones. The dashboard reads the file straight from GitHub, so new
 numbers show without a deploy.
 
-The digest covers last Monday to Sunday and goes out on the Monday. If that
-run fails, or GitHub skips it, the next morning's run posts it instead: the
-last week posted is kept in `digest.json` beside the numbers.
+The digest covers last Monday to Sunday and goes out on the Monday, after
+that morning's numbers are pushed, so its *Open the dashboard* button finds
+its week. If that run fails, or GitHub skips it, the next morning's run posts
+it instead: the last week posted is kept in `digest.json` beside the numbers.
 
 The dashboard is its own build (`vite.metrics.config.js`), run by `npm run
 build` after the app's, into `dist/metrics/`. Built apart, it can't change a

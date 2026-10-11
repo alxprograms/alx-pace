@@ -125,6 +125,8 @@ export default function Dashboard() {
   const [selection, select, moved] = useSelection()
   const bounds = metrics.status === 'ready' ? { first: metrics.file.firstDay, last: lastCompleteDay(metrics.file) } : null
   const view = bounds ? resolveRange(selection, bounds.first, bounds.last) : null
+  // Days asked for (a Slack button, a shared link) that haven't been collected yet.
+  const askedPast = bounds && !selection.preset && selection.to > bounds.last ? selection.to : null
 
   return (
     <>
@@ -141,7 +143,7 @@ export default function Dashboard() {
         {metrics.status === 'error' && (
           <Notice title="The numbers couldn’t be loaded" body="Check your connection and reload the page." />
         )}
-        {view && <Report file={metrics.file} view={view} bounds={bounds} onSelect={select} />}
+        {view && <Report file={metrics.file} view={view} bounds={bounds} onSelect={select} askedPast={askedPast} />}
         <Footer />
       </main>
     </>
@@ -362,7 +364,7 @@ function PaceCounts({ counts, shares }) {
   ))
 }
 
-function Report({ file, view, bounds, onSelect }) {
+function Report({ file, view, bounds, onSelect, askedPast }) {
   const { from, to, length } = view
   const data = useMemo(() => {
     const first = bounds.first
@@ -434,6 +436,11 @@ function Report({ file, view, bounds, onSelect }) {
             {rangeText}
             {compared && <span className="text-[#8A95BF]"> · compared with {versus}</span>}
           </p>
+          {askedPast && (
+            <p className="basis-full text-sm text-[#E8ECFA]" role="status">
+              This link asks for days to {fmtDay(askedPast)}; so far the numbers run to {fmtDay(bounds.last)}. Each day’s arrive the next morning.
+            </p>
+          )}
         </div>
         {updated && (
           <p className="flex items-center gap-2 text-xs text-[#A9B3D6]">

@@ -249,7 +249,9 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
 - The service worker leaves `metrics/` to the network: the page and every file
   it loads live under that path.
 - The Slack digest posts each week once, on the Monday or the first run after;
-  the last week posted is in `digest.json` on the `metrics` branch.
+  the last week posted is in `digest.json` on the `metrics` branch. The
+  numbers are pushed before it posts, so its button links a week already
+  published; keep that order.
 - Secrets `GOATCOUNTER_API_KEY` (read-only stats key) and `SLACK_WEBHOOK_URL`
   are the owner's to add. Without them each step is a logged no-op, never red.
 - What the page shows lives in its address (`src/metrics/dashboard/range.js`):
