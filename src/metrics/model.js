@@ -6,21 +6,22 @@
  * digest and the dashboard (see config.js on the explicit `.js` imports).
  *
  * WHAT THE COUNTS MEAN
- * GoatCounter returns visitors per path per day. The app sends each pacing
- * event at most once per device per day (src/lib/analytics.js), so a day's
- * count of `program-da` is the number of devices that opened Data Analytics
- * that day: "active learners". A learner on two devices counts twice; one
- * whose browser sends Do Not Track or Global Privacy Control is not counted.
+ * GoatCounter returns visitors per path per day. The app sends its pacing
+ * snapshot at most once per device per day (src/lib/analytics.js), and each
+ * snapshot names the learner's week, so a day's week events, added up, are
+ * the devices that opened a program that day: "active learners". A learner
+ * on two devices counts twice; one whose browser sends Do Not Track or
+ * Global Privacy Control is not counted. App opens (`/`, `open-*`) are
+ * GoatCounter visits: opens by one browser within 8 hours count once.
  *
  * THE STORED FILE (metrics.json on the `metrics` branch)
  *   { version: 1, site, updatedAt, firstDay, lastDay,
- *     days: { "2026-10-05": { "program-da": 12, "week-4": 3, "/": 20, ... } } }
+ *     days: { "2026-10-05": { "week-4-behind": 3, "week-4": 9, "/": 20, ... } } }
  * A day holds only non-zero counts; a day present with no keys is a day with
  * nothing counted. Days are GoatCounter's, in the site's time zone.
  */
 
 export const STATUSES = ['behind', 'on-track', 'ahead']
-export const PROGRAMS = ['da', 'cc', 'gd']
 
 /* ---------- dates: 'YYYY-MM-DD' strings, computed in UTC ---------- */
 
@@ -28,7 +29,8 @@ const DAY_MS = 86_400_000
 const toTime = (day) => Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10))
 const fromTime = (t) => new Date(t).toISOString().slice(0, 10)
 
-export const isDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+/** A real calendar day as 'YYYY-MM-DD': '2026-02-30' is not one. */
+export const isDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && fromTime(toTime(s)) === s
 export const addDays = (day, n) => fromTime(toTime(day) + n * DAY_MS)
 export const daysBetween = (from, to) => Math.round((toTime(to) - toTime(from)) / DAY_MS)
 export const todayUTC = (now = new Date()) => now.toISOString().slice(0, 10)
@@ -113,51 +115,78 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => 
  * Whether a stored file can be read: the wrong shape is treated as nothing
  * stored, so the collector rebuilds it from COLLECT_FROM rather than merge
  * into it, and the dashboard says it has no data rather than draw nonsense.
+ * Only real days are kept, none after `until` when given (a day from the
+ * future would stop the collector fetching until it came), and the first and
+ * last day are worked out from them, never taken on trust.
  */
-export function readFile(file) {
+export function readFile(file, { until } = {}) {
   if (!file || file.version !== 1 || typeof file.days !== 'object' || file.days === null) return null
   const days = {}
   for (const [day, counts] of Object.entries(file.days)) {
-    if (!isDay(day) || typeof counts !== 'object' || counts === null) continue
+    if (!isDay(day) || (until && day > until) || typeof counts !== 'object' || counts === null) continue
     days[day] = {}
     for (const [k, v] of Object.entries(counts)) {
       const n = Number(v)
       if (Number.isFinite(n) && n > 0) days[day][k] = n
     }
   }
-  return { ...file, days }
+  const sorted = Object.keys(days).sort()
+  return {
+    version: 1,
+    site: typeof file.site === 'string' ? file.site : null,
+    updatedAt: typeof file.updatedAt === 'string' && !Number.isNaN(Date.parse(file.updatedAt)) ? file.updatedAt : null,
+    firstDay: sorted[0] ?? null,
+    lastDay: sorted.at(-1) ?? null,
+    days,
+  }
 }
 
 /* ---------- stored days → what the dashboard and digest say ---------- */
 
 /**
- * One day's counts, read into what they mean. `program` narrows the weeks to
- * that program's (Data Analytics' are the bare `week-N`; the others are
- * prefixed). Statuses come from `status-*`, which carries no program; while
- * only Data Analytics is offered, they are its learners' (see the dashboard).
+ * One day's counts, read into what they mean, for one program.
+ *
+ * The app has sent three sets of daily events (src/lib/analytics.js), and a
+ * day can hold more than one while learners' apps update:
+ *   from 20 Jul 2026  week-4, status-behind
+ *   from 4 Oct 2026   program-da, week-4, status-behind; the pace came fifth
+ *                     in a burst, over GoatCounter's 4 a second, and was
+ *                     mostly refused
+ *   from Oct 2026     week-4-behind, alone
+ * Each sends exactly one week event a day for every active learner, plain or
+ * with the pace, so a program's week events added up are its active
+ * learners in every era. Data Analytics' weeks are bare (`week-N`); the other
+ * programs' are prefixed (`gd-week-13.5`).
+ *
+ * `status-*` names no program. It is read as Data Analytics', which was all
+ * there was until 4 Oct: Creative Tech was offered from 4 to 7 Oct, and its
+ * few learners' paces from those days are in it.
  */
 export function readDay(counts = {}, program = 'da') {
   const prefix = program === 'da' ? '' : `${program}-`
   const weekRe = new RegExp(`^${prefix}week-(\\d+(?:\\.\\d+)?)(?:-(${STATUSES.join('|')}))?$`)
-  const programs = Object.fromEntries(PROGRAMS.map((p) => [p, counts[`program-${p}`] ?? 0]))
-  const status = Object.fromEntries(STATUSES.map((s) => [s, counts[`status-${s}`] ?? 0]))
+  const status = Object.fromEntries(STATUSES.map((s) => [s, program === 'da' ? (counts[`status-${s}`] ?? 0) : 0]))
   const weeks = {}
   const weekStatus = {}
   for (const [key, n] of Object.entries(counts)) {
     const m = weekRe.exec(key)
     if (!m) continue
     const week = m[1]
+    weeks[week] = (weeks[week] ?? 0) + n
     if (m[2]) {
       weekStatus[week] ??= { behind: 0, 'on-track': 0, ahead: 0 }
       weekStatus[week][m[2]] += n
-    } else {
-      weeks[week] = (weeks[week] ?? 0) + n
+      status[m[2]] += n
     }
   }
+  const active = Object.values(weeks).reduce((a, b) => a + b, 0)
+  // From 4 Oct the old pace event was mostly refused, leaving the paces of a
+  // few learners a day. A pace for fewer than half the day's learners is that
+  // loss, not a sample of them, so it reads as not counted.
+  const paced = STATUSES.reduce((a, s) => a + status[s], 0)
+  if (paced * 2 < active) for (const s of STATUSES) status[s] = 0
   return {
-    active: programs[program] ?? 0,
-    activeAll: Object.values(programs).reduce((a, b) => a + b, 0),
-    programs,
+    active,
     status,
     weeks,
     weekStatus,
@@ -294,3 +323,10 @@ export function weeklyDigest(days, today, program = 'da') {
     hasData: week.learnerDays > 0 || week.opens > 0,
   }
 }
+
+/**
+ * Whether the weekly digest should be posted: its week is later than the last
+ * one posted (`posted`, that week's Monday, or null for none yet), or it is
+ * asked for again.
+ */
+export const digestDue = (posted, digest, force = false) => force || !posted || posted < digest.from

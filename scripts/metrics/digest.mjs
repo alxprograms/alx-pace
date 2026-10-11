@@ -1,18 +1,24 @@
 #!/usr/bin/env node
 /**
- * Posts the Monday digest to Slack: last Monday to Sunday's active learners,
+ * Posts the weekly digest to Slack: last Monday to Sunday's active learners,
  * pace mix and busiest weeks, compared with the week before.
  *
  *   SLACK_WEBHOOK_URL=… node scripts/metrics/digest.mjs --dir metrics-data
  *   node scripts/metrics/digest.mjs --dir metrics-data --dry-run   # print, don't post
  *   … --today 2026-10-12                                           # as if run that day
+ *   … --force                                                      # post even if posted
+ *
+ * Run every morning after the collector, it posts each week once: on the
+ * Monday, or on the first run after it when that one failed or never ran.
+ * The last week posted is kept in <dir>/digest.json, which the workflow
+ * commits beside the numbers.
  *
  * With no webhook, or no data collected yet, it says so and exits 0.
  */
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { METRICS_FILE } from '../../src/metrics/config.js'
-import { readFile as readStored, todayUTC, weeklyDigest } from '../../src/metrics/model.js'
+import { digestDue, readFile as readStored, todayUTC, weeklyDigest } from '../../src/metrics/model.js'
 import { digestMessage } from '../../src/metrics/slack.js'
 
 const args = process.argv.slice(2)
@@ -20,7 +26,9 @@ const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) +
 const dir = opt('--dir', 'metrics-data')
 const today = opt('--today', todayUTC())
 const dryRun = args.includes('--dry-run')
+const force = args.includes('--force') || process.env.FORCE === 'true'
 const webhook = process.env.SLACK_WEBHOOK_URL
+const postedPath = join(dir, 'digest.json')
 
 const stored = readStored(await readFile(join(dir, METRICS_FILE), 'utf8').then(JSON.parse).catch(() => null))
 if (!stored) {
@@ -28,7 +36,14 @@ if (!stored) {
   process.exit(0)
 }
 
-const message = digestMessage(weeklyDigest(stored.days, today))
+const digest = weeklyDigest(stored.days, today)
+const posted = await readFile(postedPath, 'utf8').then((t) => JSON.parse(t).lastWeek).catch(() => null)
+if (!dryRun && !digestDue(posted, digest, force)) {
+  console.log(`The digest for the week of ${digest.from} was already posted.`)
+  process.exit(0)
+}
+
+const message = digestMessage(digest)
 if (dryRun || !webhook) {
   if (!webhook && !dryRun) console.log('SLACK_WEBHOOK_URL is not set: printing the digest instead of posting it.')
   console.log(JSON.stringify(message, null, 2))
@@ -46,4 +61,5 @@ if (!res.ok) {
   console.error(`Slack refused the digest: ${res.status} ${(await res.text()).slice(0, 200)}`)
   process.exit(1)
 }
+await writeFile(postedPath, `${JSON.stringify({ lastWeek: digest.from, postedAt: new Date().toISOString() }, null, 2)}\n`)
 console.log(`Posted: ${message.text}`)

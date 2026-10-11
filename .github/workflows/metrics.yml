@@ -2,8 +2,9 @@ name: Learner metrics
 
 # Reads the app's anonymous GoatCounter counts back through its API every
 # morning, keeps them in metrics.json on the `metrics` branch (never `main`,
-# which would redeploy the app and tag a rollback point daily), and on
-# Mondays posts last week's digest to Slack. The dashboard at
+# which would redeploy the app and tag a rollback point daily), and posts
+# last week's digest to Slack: on Mondays, or on the first run after a
+# Monday whose run failed. The dashboard at
 # https://alxprograms.github.io/alx-pace/metrics/ reads the same file.
 #
 # Secrets, added by the repository owner (Settings → Secrets → Actions):
@@ -20,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       digest:
-        description: Post the weekly Slack digest now, whatever the day
+        description: Post last week's Slack digest again, even if it was posted
         type: boolean
         default: false
 
@@ -43,9 +44,12 @@ jobs:
           node-version: 24
 
       - name: Check out the metrics branch beside the code
+        id: worktree
         run: |
-          if git ls-remote --exit-code --heads origin metrics > /dev/null; then
-            git fetch --depth 1 origin metrics
+          # Full ref names: a bare "metrics" would also match a branch such as
+          # kayode/metrics, or a tag named metrics.
+          if git ls-remote --exit-code origin refs/heads/metrics > /dev/null; then
+            git fetch --depth 1 origin refs/heads/metrics
             git worktree add --detach metrics-data FETCH_HEAD
           else
             # First run: an empty branch with no history of the app's code.
@@ -55,18 +59,31 @@ jobs:
           fi
 
       - name: Collect yesterday and the days before from GoatCounter
+        id: collect
         env:
           GOATCOUNTER_API_KEY: ${{ secrets.GOATCOUNTER_API_KEY }}
         run: node scripts/metrics/collect.mjs --dir metrics-data
 
+      # Every day: digest.mjs posts a week only once (it keeps the last week
+      # posted in digest.json), so a Monday that failed is caught up the next
+      # morning. Never on numbers a failed collection left half-done.
+      - name: Post last week's digest to Slack, once
+        if: steps.collect.outcome == 'success'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          FORCE: ${{ inputs.digest }}
+        run: node scripts/metrics/digest.mjs --dir metrics-data
+
+      # Runs even when the digest failed, so the numbers are never lost to Slack.
       - name: Commit the numbers to the metrics branch
+        if: always() && steps.worktree.outcome == 'success'
         working-directory: metrics-data
         run: |
           if [ ! -f metrics.json ]; then
             echo "Nothing collected."
             exit 0
           fi
-          git add metrics.json
+          git add -A
           if git diff --cached --quiet; then
             echo "No new numbers."
             exit 0
@@ -75,15 +92,3 @@ jobs:
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
               commit --quiet -m "Learner metrics to $(date -u +%F)"
           git push --quiet origin HEAD:refs/heads/metrics
-
-      - name: Post last week's digest to Slack (Mondays)
-        if: github.event_name == 'workflow_dispatch' && inputs.digest || github.event_name == 'schedule'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          FORCE: ${{ inputs.digest }}
-        run: |
-          if [ "$(date -u +%u)" != 1 ] && [ "$FORCE" != true ]; then
-            echo "Not Monday: no digest today."
-            exit 0
-          fi
-          node scripts/metrics/digest.mjs --dir metrics-data

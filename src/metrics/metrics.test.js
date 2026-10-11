@@ -3,7 +3,9 @@ import {
   addDays,
   buildFile,
   dayRange,
+  digestDue,
   hitsToDays,
+  isDay,
   mergeDays,
   mondayOf,
   mostBehindWeek,
@@ -121,33 +123,43 @@ describe('from GoatCounter to stored days', () => {
       '2026-10-05': { c: 2 },
     })
   })
+
+  it('keeps only real days, none after the day given, and works out the first and last itself', () => {
+    const file = readFile(
+      {
+        version: 1,
+        firstDay: 'garbage',
+        lastDay: '2026-10-99',
+        updatedAt: 'not a time',
+        days: { '2026-10-99': { a: 1 }, '2026-02-30': { a: 1 }, '2026-10-04': { a: 1 }, '2026-10-05': { a: 1 }, '2027-01-01': { a: 1 } },
+      },
+      { until: '2026-10-10' },
+    )
+    expect(Object.keys(file.days)).toEqual(['2026-10-04', '2026-10-05'])
+    expect([file.firstDay, file.lastDay, file.updatedAt]).toEqual(['2026-10-04', '2026-10-05', null])
+    expect(isDay('2026-02-30')).toBe(false)
+    expect(isDay('2024-02-29')).toBe(true)
+  })
 })
 
 describe('what a day says', () => {
+  // A day as the app sends it now: one event a learner, week and pace together.
   const counts = {
     '/': 20,
     'open-installed': 5,
     'open-browser': 15,
-    'program-da': 12,
-    'program-gd': 2,
-    'week-4': 7,
-    'week-5': 5,
     'week-4-behind': 3,
     'week-4-on-track': 4,
-    'gd-week-13.5': 2,
+    'week-5-ahead': 5,
     'gd-week-13.5-ahead': 2,
-    'status-behind': 4,
-    'status-on-track': 8,
-    'status-ahead': 2,
   }
 
-  it('counts Data Analytics learners by program, week and pace', () => {
+  it('counts Data Analytics learners by week, by pace and by both', () => {
     const d = readDay(counts, 'da')
     expect(d.active).toBe(12)
-    expect(d.activeAll).toBe(14)
     expect(d.weeks).toEqual({ 4: 7, 5: 5 })
-    expect(d.weekStatus).toEqual({ 4: { behind: 3, 'on-track': 4, ahead: 0 } })
-    expect(d.status).toEqual({ behind: 4, 'on-track': 8, ahead: 2 })
+    expect(d.weekStatus).toEqual({ 4: { behind: 3, 'on-track': 4, ahead: 0 }, 5: { behind: 0, 'on-track': 0, ahead: 5 } })
+    expect(d.status).toEqual({ behind: 3, 'on-track': 4, ahead: 5 })
     expect([d.opens, d.installed, d.browser]).toEqual([20, 5, 15])
   })
 
@@ -155,7 +167,32 @@ describe('what a day says', () => {
     const d = readDay(counts, 'gd')
     expect(d.active).toBe(2)
     expect(d.weeks).toEqual({ 13.5: 2 })
-    expect(d.weekStatus['13.5'].ahead).toBe(2)
+    expect(d.status).toEqual({ behind: 0, 'on-track': 0, ahead: 2 })
+  })
+
+  it('counts the learners of July to October, before the app named a program', () => {
+    // 20 Jul – 3 Oct: week and pace, sent separately.
+    const d = readDay({ 'week-3': 6, 'week-4': 4, 'status-behind': 2, 'status-on-track': 8 })
+    expect(d.active).toBe(10)
+    expect(d.weeks).toEqual({ 3: 6, 4: 4 })
+    expect(d.status).toEqual({ behind: 2, 'on-track': 8, ahead: 0 })
+    expect(d.weekStatus).toEqual({})
+  })
+
+  it('counts each learner once on a day when apps are part-way through an update', () => {
+    // 4 Oct – now: program, week and a mostly-refused pace; then the new single event.
+    const d = readDay({ 'program-da': 9, 'week-4': 9, 'status-behind': 1, 'week-4-behind': 2, 'week-5-on-track': 3, 'cc-week-2': 1, 'status-ahead': 1 })
+    expect(d.active).toBe(14)
+    expect(d.weeks).toEqual({ 4: 11, 5: 3 })
+    expect(d.status).toEqual({ behind: 3, 'on-track': 3, ahead: 1 })
+    expect(readDay({ 'program-cc': 1, 'cc-week-2': 1, 'status-ahead': 1 }, 'cc').status.ahead).toBe(0)
+  })
+
+  it('reads the pace of a day when most of it was refused as not counted, not as the mix', () => {
+    // 4–11 Oct: 1 pace got through for 9 learners.
+    const d = readDay({ 'program-da': 9, 'week-4': 9, 'status-behind': 1 })
+    expect(d.active).toBe(9)
+    expect(d.status).toEqual({ behind: 0, 'on-track': 0, ahead: 0 })
   })
 })
 
@@ -232,7 +269,7 @@ describe('the Monday digest', () => {
   for (const d of dayRange('2026-10-05', '2026-10-11')) {
     days[d] = { 'program-da': 12, 'week-4': 8, 'week-5': 4, 'status-behind': 3, 'status-on-track': 9, 'open-installed': 3, 'open-browser': 9 }
   }
-  days['2026-10-07']['program-da'] = 19
+  days['2026-10-07'] = { ...days['2026-10-07'], 'program-da': 19, 'week-4': 15 }
 
   it('covers last Monday to Sunday, compared with the week before', () => {
     const d = weeklyDigest(days, '2026-10-12')
@@ -250,6 +287,16 @@ describe('the Monday digest', () => {
     expect(weeklyDigest(days, '2026-10-18').to).toBe('2026-10-11')
   })
 
+  it('is posted once a week: on the Monday, or on the first run after it', () => {
+    const monday = weeklyDigest(days, '2026-10-12')
+    expect(digestDue(null, monday)).toBe(true)
+    expect(digestDue('2026-09-28', monday)).toBe(true)
+    // Monday's run failed: Tuesday's still owes the same week.
+    expect(digestDue('2026-09-28', weeklyDigest(days, '2026-10-13'))).toBe(true)
+    expect(digestDue('2026-10-05', weeklyDigest(days, '2026-10-13'))).toBe(false)
+    expect(digestDue('2026-10-05', monday, true)).toBe(true)
+  })
+
   it('says so when nothing was counted', () => {
     const d = weeklyDigest({}, '2026-10-12')
     expect(d.hasData).toBe(false)
@@ -263,7 +310,7 @@ describe('the Monday digest', () => {
     const all = JSON.stringify(msg.blocks)
     expect(all).toContain('↑ 30% on the week before')
     expect(all).toContain('On track 75% · Behind 25% · Ahead 0%')
-    expect(all).toContain('Week 4 (8 a day) · Week 5 (4 a day)')
+    expect(all).toContain('Week 4 (9 a day) · Week 5 (4 a day)')
     expect(all).toContain('Wednesday, 19 learners')
     expect(all).toContain(DASHBOARD_URL)
   })
@@ -314,6 +361,24 @@ describe('fetching from GoatCounter', () => {
         : page([], false)
     await fetchDailyHits({ site: 's', token: 't', from: '2026-10-01', to: '2026-10-02', fetchImpl, sleep: async (ms) => waits.push(ms) })
     expect(waits).toEqual([3000])
+  })
+
+  it('tries again after a 5xx or a dropped connection, then gives up with a clear error', async () => {
+    const waits = []
+    let n = 0
+    const flaky = async () => {
+      n++
+      if (n === 1) throw new TypeError('fetch failed')
+      if (n === 2) return { ok: false, status: 502, headers: { get: () => null }, text: async () => 'Bad Gateway' }
+      return page([], false)
+    }
+    await fetchDailyHits({ site: 's', token: 't', from: '2026-10-01', to: '2026-10-02', fetchImpl: flaky, sleep: async (ms) => waits.push(ms) })
+    expect(waits).toEqual([2000, 4000])
+
+    const down = async () => ({ ok: false, status: 503, headers: { get: () => null }, text: async () => 'down' })
+    const err = await fetchDailyHits({ site: 's', token: 't', from: 'a', to: 'b', fetchImpl: down, sleep: async () => {} }).catch((e) => e)
+    expect(err).toBeInstanceOf(GoatCounterError)
+    expect(err.message).toContain('503')
   })
 
   it('fails with GoatCounter’s own message on a bad key, without the token', async () => {

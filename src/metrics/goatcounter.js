@@ -7,8 +7,10 @@
  * ids already returned. Shapes and limits are from GoatCounter's own source
  * (handlers/api.go, hit_list.go): 4 requests a second and 500 an hour per key.
  *
- * `fetchImpl` and `sleep` are injectable so the paging and the retry on 429
- * can be tested without a network.
+ * A 429, a 5xx or a dropped connection is tried again, up to MAX_RETRIES
+ * times, so one bad moment doesn't cost a day's run. `fetchImpl` and `sleep`
+ * are injectable so the paging and the retries can be tested without a
+ * network.
  */
 
 const PAGE_SIZE = 100
@@ -51,12 +53,23 @@ export async function fetchDailyHits({ site, token, from, to, fetchImpl = fetch,
 
 async function getJSON(url, token, fetchImpl, sleep) {
   for (let attempt = 0; ; attempt++) {
-    const res = await fetchImpl(url, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    })
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      // X-Rate-Limit-Reset: seconds until the window frees up.
-      const reset = Number(res.headers?.get?.('X-Rate-Limit-Reset'))
+    let res
+    try {
+      res = await fetchImpl(url, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      })
+    } catch (error) {
+      // A dropped connection: worth another try, like a 5xx. The URL in the
+      // message holds no secret; the token travels in a header.
+      if (attempt < MAX_RETRIES) {
+        await sleep(2000 * 2 ** attempt)
+        continue
+      }
+      throw new GoatCounterError(`GoatCounter unreachable: ${error?.message ?? error}`)
+    }
+    if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
+      // X-Rate-Limit-Reset (on a 429): seconds until the window frees up.
+      const reset = res.status === 429 ? Number(res.headers?.get?.('X-Rate-Limit-Reset')) : NaN
       await sleep(Number.isFinite(reset) && reset > 0 ? reset * 1000 : 2000 * 2 ** attempt)
       continue
     }

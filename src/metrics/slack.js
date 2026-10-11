@@ -61,7 +61,7 @@ export function digestMessage(d) {
           { type: 'mrkdwn', text: `*Pace*\n${pace}` },
           { type: 'mrkdwn', text: `*Busiest day*\n${peak}` },
           { type: 'mrkdwn', text: `*Where learners are*\n${busiest}` },
-          { type: 'mrkdwn', text: `*Learner-days*\n${d.learnerDays} · ${pct(d.installedShare)} in the installed app` },
+          { type: 'mrkdwn', text: `*Learner-days*\n${d.learnerDays} · ${pct(d.installedShare)} of visits from the installed app` },
         ],
       },
       link(),

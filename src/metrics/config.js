@@ -15,7 +15,7 @@
  */
 export { GOATCOUNTER_SITE } from '../lib/analyticsConfig.js'
 
-/** The app's address. Mirrors APP_URL in src/lib/appUrl.js (config.test.js holds them together). */
+/** The app's address. Mirrors APP_URL in src/lib/appUrl.js (metrics.test.js holds them together). */
 export const APP_URL = 'https://alxprograms.github.io/alx-pace/'
 export const DASHBOARD_URL = `${APP_URL}metrics/`
 
@@ -26,10 +26,10 @@ export const METRICS_FILE = 'metrics.json'
 export const DATA_URL = `https://raw.githubusercontent.com/${METRICS_REPO}/${METRICS_BRANCH}/${METRICS_FILE}`
 
 /**
- * The first day the collector fetches when there is nothing stored yet. The
- * app began sending events in September 2026; earlier days are all zero.
+ * The first day the collector fetches when there is nothing stored yet: the
+ * day the app began sending events (fae3130, 20 July 2026).
  */
-export const COLLECT_FROM = '2026-09-01'
+export const COLLECT_FROM = '2026-07-20'
 
 /**
  * How many days back each daily run fetches again. GoatCounter's day follows

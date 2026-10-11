@@ -15,7 +15,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { COLLECT_FROM, GOATCOUNTER_SITE, METRICS_FILE, REFETCH_DAYS } from '../../src/metrics/config.js'
-import { addDays, buildFile, hitsToDays, mergeDays, readFile as readStored, todayUTC } from '../../src/metrics/model.js'
+import { addDays, buildFile, hitsToDays, mergeDays, readDay, readFile as readStored, todayUTC } from '../../src/metrics/model.js'
 import { fetchDailyHits } from '../../src/metrics/goatcounter.js'
 import { stringifyFile } from './io.mjs'
 
@@ -30,8 +30,9 @@ if (!token) {
 }
 
 const path = join(dir, METRICS_FILE)
-const stored = readStored(await readFile(path, 'utf8').then(JSON.parse).catch(() => null))
 const to = todayUTC()
+// Days after today are dropped on reading: one would stop every later fetch.
+const stored = readStored(await readFile(path, 'utf8').then(JSON.parse).catch(() => null), { until: to })
 const from = stored?.lastDay
   ? [addDays(stored.lastDay, -REFETCH_DAYS), COLLECT_FROM].sort().at(-1)
   : COLLECT_FROM
@@ -44,4 +45,4 @@ const file = buildFile(days, { site, updatedAt: new Date().toISOString() })
 await mkdir(dir, { recursive: true })
 await writeFile(path, stringifyFile(file))
 const last = file.days[addDays(to, -1)] ?? {}
-console.log(`${hits.length} paths, ${Object.keys(file.days).length} days stored. Yesterday: ${last['program-da'] ?? 0} active Data Analytics learners.`)
+console.log(`${hits.length} paths, ${Object.keys(file.days).length} days stored. Yesterday: ${readDay(last).active} active Data Analytics learners.`)
