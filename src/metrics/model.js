@@ -326,7 +326,8 @@ export function weeklyDigest(days, today, program = 'da') {
   const thisMonday = mondayOf(today)
   const from = addDays(thisMonday, -7)
   const to = addDays(thisMonday, -1)
-  const week = summarize(series(days, from, to, program))
+  const rows = series(days, from, to, program)
+  const week = summarize(rows)
   const prior = summarize(series(days, addDays(from, -7), addDays(from, -1), program))
   const topWeeks = Object.entries(week.weeks)
     .sort(([wa, a], [wb, b]) => b - a || byWeek(wa, wb))
@@ -341,6 +342,8 @@ export function weeklyDigest(days, today, program = 'da') {
     learnerDays: week.learnerDays,
     learnerDaysChange: change(week.learnerDays, prior.learnerDays),
     peak: week.peak,
+    // Days that share the peak: more than one, and no single day was busiest.
+    peakDays: week.peak ? rows.filter((r) => r.active === week.peak.active).length : 0,
     status: week.status,
     statusShare: week.statusShare,
     installed: week.installed,

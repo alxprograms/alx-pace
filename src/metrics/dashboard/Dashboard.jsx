@@ -91,36 +91,44 @@ function lastCompleteDay(file) {
 
 /**
  * The selection, kept in the page address: a link opens the same view, and
- * Back returns to the one before (a day picked from a chart, say).
+ * Back returns to the one before (a day picked from a chart, say). Choosing
+ * the view already shown adds no step to Back. `moved` counts Back and
+ * Forward, which overrule a date box mid-edit (DateBox).
  */
 function useSelection() {
   const [selection, setSelection] = useState(() => selectionFromSearch(window.location.search))
+  const [moved, setMoved] = useState(0)
   useEffect(() => {
-    const onPop = () => setSelection(selectionFromSearch(window.location.search))
+    const onPop = () => {
+      setSelection(selectionFromSearch(window.location.search))
+      setMoved((n) => n + 1)
+    }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
   const select = useCallback((next) => {
+    const { pathname, search, hash } = window.location
+    const nextSearch = searchForSelection(next, search)
+    if (nextSearch === search) return
     setSelection(next)
     try {
-      const { pathname, search, hash } = window.location
-      window.history.pushState(null, '', `${pathname}${searchForSelection(next, search)}${hash}`)
+      window.history.pushState(null, '', `${pathname}${nextSearch}${hash}`)
     } catch {
       /* an address that can't be written still leaves the page working */
     }
   }, [])
-  return [selection, select]
+  return [selection, select, moved]
 }
 
 export default function Dashboard() {
   const metrics = useMetrics()
-  const [selection, select] = useSelection()
+  const [selection, select, moved] = useSelection()
   const bounds = metrics.status === 'ready' ? { first: metrics.file.firstDay, last: lastCompleteDay(metrics.file) } : null
   const view = bounds ? resolveRange(selection, bounds.first, bounds.last) : null
 
   return (
     <>
-      <Header view={view} bounds={bounds} onSelect={select} />
+      <Header view={view} bounds={bounds} onSelect={select} moved={moved} />
       <main className={`${WIDTH} pb-16`}>
         <Hero />
         {metrics.status === 'loading' && <Notice title="Reading the latest numbers…" />}
@@ -140,7 +148,7 @@ export default function Dashboard() {
   )
 }
 
-function Header({ view, bounds, onSelect }) {
+function Header({ view, bounds, onSelect, moved }) {
   return (
     <header className="z-20 border-b lg:sticky lg:top-0 border-white/[0.08] bg-[#03134F]/75 backdrop-blur-md">
       <div className={`${WIDTH} flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-3`}>
@@ -157,7 +165,7 @@ function Header({ view, bounds, onSelect }) {
             <span className="block text-[11px] font-medium text-[#A9B3D6]">Learner pulse</span>
           </span>
         </a>
-        {view && <RangeFilter view={view} bounds={bounds} onSelect={onSelect} />}
+        {view && <RangeFilter view={view} bounds={bounds} onSelect={onSelect} moved={moved} />}
       </div>
     </header>
   )
@@ -168,7 +176,7 @@ function Header({ view, bounds, onSelect }) {
  * choice in navy. The presets, then the dates themselves, which always show
  * what is on the page: pick a From date for one day, and a To date for more.
  */
-function RangeFilter({ view, bounds, onSelect }) {
+function RangeFilter({ view, bounds, onSelect, moved }) {
   const pick = (end) => (day) => {
     if (day < bounds.first || day > bounds.last) return
     const next = pickDate(view, end, day)
@@ -199,26 +207,53 @@ function RangeFilter({ view, bounds, onSelect }) {
         ))}
       </span>
       <span className={`flex items-center gap-0.5 rounded-xl ps-1 ${view.preset ? '' : 'bg-[#03134F]/[0.07] ring-1 ring-[#03134F]/25'}`}>
-        <DateBox label="From" value={view.from} min={bounds.first} max={bounds.last} onPick={pick('from')} />
+        <DateBox label="From" value={view.from} min={bounds.first} max={bounds.last} onPick={pick('from')} moved={moved} />
         <span aria-hidden="true" className="text-sm text-[#5A6690]">
           –
         </span>
-        <DateBox label="To" value={view.to} min={bounds.first} max={bounds.last} onPick={pick('to')} />
+        <DateBox label="To" value={view.to} min={bounds.first} max={bounds.last} onPick={pick('to')} moved={moved} />
       </span>
     </div>
   )
 }
 
+/** How long typing in a date box rests before the date is taken. */
+export const SETTLE_MS = 1000
+
 /**
- * A date box. Left to itself while it has focus, so typing a date isn't
- * undone halfway (a half-typed year is a valid but far-off date); it shows
- * the page's dates again whenever they change from elsewhere.
+ * A date box. A date picked from the calendar is taken at once. A typed one
+ * is taken once typing rests, or on Enter, or on leaving the box: typing
+ * "28" in the day passes through the 2nd, a real date that would otherwise
+ * move the page there and drag the other end with it. Enter also takes the
+ * date already in the box, so a preset's first day can be had on its own.
+ *
+ * Left to itself while it has focus, so typing isn't undone halfway; it
+ * shows the page's dates again whenever they change from elsewhere, and at
+ * once on Back or Forward (`moved`), which overrule an edit in progress.
  */
-function DateBox({ label, value, min, max, onPick }) {
+export function DateBox({ label, value, min, max, onPick, moved = 0 }) {
   const ref = useRef(null)
+  const typedAt = useRef(0)
+  const pending = useRef(null)
+  const timer = useRef(null)
+  const seen = useRef(moved)
   useEffect(() => {
-    if (ref.current && ref.current !== document.activeElement) ref.current.value = value
-  }, [value])
+    const el = ref.current
+    if (!el) return
+    const overruled = seen.current !== moved
+    seen.current = moved
+    if (overruled) {
+      clearTimeout(timer.current)
+      pending.current = null
+    }
+    if (overruled || el !== document.activeElement) el.value = value
+  }, [value, moved])
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const take = (day = pending.current) => {
+    clearTimeout(timer.current)
+    pending.current = null
+    if (day) onPick(day)
+  }
   return (
     <label className="flex items-center">
       <span className="sr-only">{label}</span>
@@ -228,8 +263,19 @@ function DateBox({ label, value, min, max, onPick }) {
         defaultValue={value}
         min={min}
         max={max}
-        onChange={(e) => onPick(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') take(e.currentTarget.value)
+          else typedAt.current = Date.now()
+        }}
+        onChange={(e) => {
+          // A change right after a key press was typed; any other came from the calendar.
+          if (Date.now() - typedAt.current > 100) return take(e.target.value)
+          pending.current = e.target.value
+          clearTimeout(timer.current)
+          timer.current = setTimeout(take, SETTLE_MS)
+        }}
         onBlur={(e) => {
+          take()
           e.target.value = value
         }}
         className="min-h-[44px] rounded-xl bg-transparent px-2 text-sm font-semibold tabular-nums text-[#03134F] outline-none [color-scheme:light] hover:bg-[#03134F]/[0.07] focus-visible:ring-2 focus-visible:ring-[#0452F0]"
@@ -342,7 +388,7 @@ function Report({ file, view, bounds, onSelect }) {
   const oneDay = length === 1
   const dayName = (day) => fmtDay(day, { weekday: 'long', day: 'numeric', month: 'short' })
   const versus = data.hasPrior ? (oneDay ? 'the day before' : `the ${length} days before`) : null
-  const period = oneDay ? `on ${dayName(from)}` : from === bounds.first ? 'since counting began' : `over these ${length} days`
+  const period = oneDay ? `on ${dayName(from)}` : from === bounds.first && to === bounds.last ? 'since counting began' : `over these ${length} days`
   const rangeText = oneDay
     ? fmtDay(from, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : `${fmtDay(from)} – ${fmtDay(to, { day: 'numeric', month: 'short', year: 'numeric' })}`
@@ -408,10 +454,16 @@ function Report({ file, view, bounds, onSelect }) {
             <Delta value={visitsChange} />
           </div>
           <p className="mt-3 text-sm text-[#A9B3D6]">
-            <Em>{fmtInt(shown)}</Em> out of <Em>{fmtInt(s.visits)}</Em> visits shown, as GoatCounter lists its top {GOATCOUNTER_LISTED} paths
+            {s.visits > 0 ? (
+              <>
+                <Em>{fmtInt(shown)}</Em> out of <Em>{fmtInt(s.visits)}</Em> visits shown, as GoatCounter lists its top {GOATCOUNTER_LISTED} paths
+              </>
+            ) : (
+              `No visits were recorded ${oneDay ? 'that day' : 'in these days'}.`
+            )}
           </p>
           <dl className={`mt-6 grid gap-4 border-t border-white/[0.08] pt-4 ${kinds.other ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
-            <VisitKind label="App opens" value={kinds.opens} />
+            <VisitKind label="Page views" value={kinds.opens} />
             <VisitKind label="How it was opened" value={kinds.howOpened} />
             <VisitKind label="Week and pace" value={kinds.weekPace} />
             {kinds.other > 0 && <VisitKind label="Other" value={kinds.other} />}
@@ -426,13 +478,20 @@ function Report({ file, view, bounds, onSelect }) {
               other count once.
             </p>
             <p>
-              So one learner’s first open of the day makes three visits (four or five with the app before 11 October), and visits run well above
-              learners: {oneDay ? 'that day’s' : 'these'} <Em>{fmtInt(s.visits)}</Em> visits are <Em>{fmtInt(s.learnerDays)}</Em> {oneDay ? 'learners' : 'learner-days'}.
+              So one learner’s first open of the day makes three visits (four or five with the app before 11 October)
+              {s.visits > 0 && s.learnerDays > 0 ? (
+                <>
+                  , and visits run well above learners: {oneDay ? 'that day’s' : 'these'} <Em>{fmtInt(s.visits)}</Em> visits are{' '}
+                  <Em>{oneDay ? plural(s.learnerDays, 'learner', 'learners') : plural(s.learnerDays, 'learner-day', 'learner-days')}</Em>.
+                </>
+              ) : (
+                '.'
+              )}
             </p>
             <p>
-              It is GoatCounter’s own count, the total at the top of its page, where “{fmtInt(shown)} out of {fmtInt(s.visits)} visits shown”
-              means the {GOATCOUNTER_LISTED} paths it lists out of them all. Counted to the end of {fmtDay(to, { day: 'numeric', month: 'short' })};
-              GoatCounter’s page also counts today so far.
+              It is GoatCounter’s own count, the total at the top of its page, where “N out of M visits shown” means the visits on the{' '}
+              {GOATCOUNTER_LISTED} paths it lists out of them all. Counted to the end of {fmtDay(to, { day: 'numeric', month: 'short' })}
+              {to === bounds.last ? '; GoatCounter’s page also counts today so far.' : ', the same as GoatCounter shows for these dates.'}
             </p>
           </div>
         </div>
@@ -579,7 +638,7 @@ function Report({ file, view, bounds, onSelect }) {
                 </p>
               )}
               <p className="text-[#8A95BF]">
-                {chartHint} Click a day’s column to see that day on its own.
+                {chartHint} Click a day’s column (on a touch screen, tap it twice) to see that day on its own.
               </p>
             </>
           )

@@ -318,6 +318,17 @@ describe('the Monday digest', () => {
     expect(all).not.toMatch(/a day on average|\d\.\d/)
   })
 
+  it('names no busiest day that others tie with, and says 1 learner, not 1 learners', () => {
+    // 10–16 Aug 2026 as it was: 2 learners on Monday, Tuesday and Wednesday, 1 on the rest.
+    const tied = {}
+    dayRange('2026-08-10', '2026-08-16').forEach((d, i) => (tied[d] = { 'week-1': i < 3 ? 2 : 1 }))
+    const d = weeklyDigest(tied, '2026-08-17')
+    expect(d.peakDays).toBe(3)
+    expect(JSON.stringify(digestMessage(d).blocks)).toContain('Busiest day*\\n2 learners, on 3 days')
+    const one = { '2026-08-12': { 'week-1': 1 } }
+    expect(JSON.stringify(digestMessage(weeklyDigest(one, '2026-08-17')).blocks)).toContain('Busiest day*\\nWednesday 12 Aug, 1 learner"')
+  })
+
   it('says so when nothing was counted', () => {
     const d = weeklyDigest({}, '2026-10-12')
     expect(d.hasData).toBe(false)

@@ -66,11 +66,13 @@ function pointerProps(pick, setIndex) {
 /**
  * Pointer and key handling for a chart over days. Hover, or a tap on a phone,
  * reads a day out; a click, a second tap on the same day, or Enter picks it
- * (onPick) to see it on its own. The first tap only reads, so a phone never
- * jumps on a tap meant to read.
+ * (onPick) to see it on its own. On a touch screen the first tap only reads,
+ * so a phone never jumps on a tap meant to read; a mouse picks on its click.
+ * The day in hand belongs to the days shown: when they change (a day picked,
+ * a new range) nothing is in hand until the pointer or a key says so again.
  */
 function useDayChart(rows, bandAt, onPick) {
-  const [index, setIndex, onKeyDown] = useKeyedIndex(rows.length)
+  const [index, setIndex, onKeyDown] = useKeyedIndex(rows.length, `${rows[0]?.day}:${rows.length}`)
   const armed = useRef(null)
   const at = (e) => {
     const i = bandAt(e)
@@ -80,12 +82,12 @@ function useDayChart(rows, bandAt, onPick) {
     onPointerMove: (e) => setIndex(at(e)),
     onPointerDown: (e) => {
       const i = at(e)
-      armed.current = i != null && i === index ? i : null
+      armed.current = i != null && (e.pointerType !== 'touch' || i === index) ? i : null
       setIndex(i)
     },
     onPointerLeave: (e) => e.pointerType !== 'touch' && setIndex(null),
     onClick: () => {
-      if (onPick && armed.current != null) onPick(rows[armed.current].day)
+      if (onPick && rows[armed.current]) onPick(rows[armed.current].day)
       armed.current = null
     },
     onKeyDown: (e) => {
@@ -130,9 +132,23 @@ function Tooltip({ x, y, width, title, rows }) {
   )
 }
 
-/** Keyboard reading for a chart over days or rows: arrows move, Home/End jump, Escape leaves. */
-function useKeyedIndex(count) {
-  const [index, setIndex] = useState(null)
+/**
+ * Keyboard reading for a chart over days or rows: arrows move, Home/End jump,
+ * Escape leaves. The index is kept with `key`, what is charted: when that
+ * changes, the index is dropped rather than left pointing at another day, or
+ * past the end.
+ */
+function useKeyedIndex(count, key = count) {
+  const [held, setHeld] = useState({ key, index: null })
+  const index = held.key === key && held.index != null && held.index < count ? held.index : null
+  const setIndex = useCallback(
+    (next) =>
+      setHeld((h) => {
+        const prev = h.key === key && h.index != null && h.index < count ? h.index : null
+        return { key, index: typeof next === 'function' ? next(prev) : next }
+      }),
+    [key, count],
+  )
   const onKeyDown = useCallback(
     (e) => {
       if (!count) return
@@ -150,7 +166,7 @@ function useKeyedIndex(count) {
         setIndex(null)
       }
     },
-    [count],
+    [count, setIndex],
   )
   return [index, setIndex, onKeyDown]
 }

@@ -52,7 +52,12 @@ export function digestMessage(d) {
   ].join('\n')
   const pace = STATUS_LINE(d.status, d.statusShare)
   const busiest = d.topWeeks.length ? d.topWeeks.map((w) => `${weekLabel(w.week)}: ${fmtInt(w.learnerDays)}`).join(' · ') : '–'
-  const peak = d.peak ? `${fmtDay(d.peak.day, { weekday: 'long', day: 'numeric', month: 'short' })}, ${fmtInt(d.peak.active)} learners` : '–'
+  const peakLearners = `${fmtInt(d.peak?.active ?? 0)} ${d.peak?.active === 1 ? 'learner' : 'learners'}`
+  const peak = !d.peak
+    ? '–'
+    : d.peakDays > 1
+      ? `${peakLearners}, on ${d.peakDays} days`
+      : `${fmtDay(d.peak.day, { weekday: 'long', day: 'numeric', month: 'short' })}, ${peakLearners}`
 
   return {
     text: `${title}: ${fmtInt(d.visits)} visits, ${fmtInt(d.learnerDays)} learner-days`,
