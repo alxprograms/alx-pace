@@ -24,6 +24,7 @@ const CACHE = 'alx-pace-v3'
 const ROOT_PATH = new URL('./', self.location).pathname
 const SHELL_PATHS = new Set([ROOT_PATH, `${ROOT_PATH}index.html`])
 const SHARE_PATH = `${ROOT_PATH}share/`
+const METRICS_PATH = `${ROOT_PATH}metrics/`
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -59,6 +60,15 @@ self.addEventListener('fetch', (event) => {
     their way entirely.
   */
   if (url.pathname.startsWith(SHARE_PATH)) return
+
+  /*
+    Nor is the learner-usage dashboard (metrics/), a separate page that only
+    the people running the app read. Offline, the fallback below would show
+    the app at its address; and its files, cached here, would only fill a
+    learner's phone. Everything it loads is built under metrics/ too
+    (vite.metrics.config.js), so this one rule leaves all of it to the network.
+  */
+  if (url.pathname.startsWith(METRICS_PATH)) return
 
   // Navigations: network-first with offline fallback to the cached shell.
   if (request.mode === 'navigate') {

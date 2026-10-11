@@ -61,6 +61,11 @@ lose data.
   that is *served* is on the `bridge` branch of `oldhome`. After changing
   anything under `bridge/`, republish that branch and trigger its Pages build,
   or the old address keeps handing over stale payloads.
+- The `metrics` branch of `origin` holds data, not code: `metrics.json`, written
+  every morning by `.github/workflows/metrics.yml`. It shares no history with
+  `main`; never merge it, rebase onto it or push to it by hand. Its commits
+  don't deploy (deploys run on `main` only), and the dashboard reads the file
+  from raw.githubusercontent.com, so new numbers need no deploy.
 - `BASE_PATH=/alx-pace/` is injected only by CI. Local dev and preview serve from
   `/`, so never hardcode the subpath — use `import.meta.env.BASE_URL`.
 - The account that owns the app repo is a **personal account**, so it has exactly
@@ -210,6 +215,43 @@ secret alone changes nothing on the client.
 
 Analytics is **active**: `GOATCOUNTER_SITE = 'alxpace'`. Plain GET beacons, no
 vendor script, DNT and GPC honoured, aggregate counts only.
+
+- **GoatCounter refuses a 5th hit within a second from one device** (its
+  `/count` limit is 4/s per IP and browser). The day's first open sends 3:
+  `/`, `open-*`, and the one daily event, `week-N-<status>`. Adding a beacon
+  to that burst loses data silently; `analytics.test.js` holds it at 4 or
+  fewer. From 4 to ~11 Oct 2026 the app sent 5, and most paces were refused.
+- The daily event is sent with `ns=true` (count every hit): the app already
+  sends it once a day, and GoatCounter's own 8-hour sessions would merge
+  learners behind one address.
+- Event names are a contract with the dashboard. `readDay` in
+  `src/metrics/model.js` reads every set the app has ever sent (its comment
+  lists them); a new name needs a reading there, or its days read as empty.
+
+### The learner dashboard (`/metrics/`)
+
+```
+GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
+  → metrics.json on the `metrics` branch → metrics/index.html reads it
+  Mondays: scripts/metrics/digest.mjs → Slack incoming webhook
+```
+
+- Its own Vite build (`vite.metrics.config.js`, run by `npm run build` after the
+  app's) into `dist/metrics/`, so it can never change the app's output: never
+  add it to `vite.config.js` as a second input, which shares chunks with the
+  app. It has its own Tailwind config too (`tailwind.metrics.config.js`; the
+  app's config excludes `src/metrics/**`, so the app's CSS stays its own).
+- `src/metrics/*.js` also runs in plain Node (the scripts), so it uses explicit
+  `.js` import paths and never the app's extensionless modules. That is why
+  `config.js` repeats the app's address; a test holds the two equal.
+- The service worker leaves `metrics/` to the network: the page and every file
+  it loads live under that path.
+- The Slack digest posts each week once, on the Monday or the first run after;
+  the last week posted is in `digest.json` on the `metrics` branch.
+- Secrets `GOATCOUNTER_API_KEY` (read-only stats key) and `SLACK_WEBHOOK_URL`
+  are the owner's to add. Without them each step is a logged no-op, never red.
+- `?data=<url>` points the page at another file, under `npm run dev` only.
+  `scripts/metrics/sample.mjs` makes one; README has the commands.
 
 ## What makes a feature expensive here
 

@@ -13,9 +13,12 @@
  * tallies only, never identities):
  *   - an app-open pageview
  *   - whether the app runs installed (standalone) or in a browser tab
- *   - once per device per day: the learner's program (da / cc / gd),
- *     current week number and pacing status (behind / on-track / ahead)
- *     as bare event names
+ *   - once per device per day: one event naming the learner's current week
+ *     and pacing status (behind / on-track / ahead) together, `week-4-behind`
+ *     (other programs prefixed: `gd-week-5-behind`)
+ *
+ * The public dashboard at /metrics/ reads these counts, collected daily from
+ * GoatCounter's API by .github/workflows/metrics.yml (see scripts/metrics/).
  * Tracking is skipped entirely for browsers signalling Do Not Track or
  * Global Privacy Control.
  */

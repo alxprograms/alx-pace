@@ -1,7 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  // The learner-usage dashboard has its own config (tailwind.metrics.config.js),
+  // so none of its classes are shipped in the app's stylesheet.
+  content: ['./index.html', './src/**/*.{js,jsx}', '!./src/metrics/**'],
   theme: {
     extend: {
       colors: {

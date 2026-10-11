@@ -6,7 +6,7 @@
   "description": "ALX Self-Pace — Learner Pacing & Schedule Tracker for Data Analytics and Creative Tech (zero-login, mobile-first).",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build -c vite.metrics.config.js",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",

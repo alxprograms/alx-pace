@@ -21,7 +21,7 @@ function enabled() {
   )
 }
 
-function send(path, { event = true } = {}) {
+function send(path, { event = true, everyHit = false } = {}) {
   if (!enabled()) return
   try {
     const params = new URLSearchParams({
@@ -29,6 +29,11 @@ function send(path, { event = true } = {}) {
       e: event ? 'true' : 'false',
       rnd: String(Date.now()),
     })
+    // `ns` (no session): count this hit even if the same IP and browser sent
+    // it within the last 8 hours. GoatCounter otherwise keeps one per
+    // session, which merges learners behind one hub or carrier address and
+    // drops a learner's second day when they open late and again early.
+    if (everyHit) params.set('ns', 'true')
     fetch(`https://${GOATCOUNTER_SITE}.goatcounter.com/count?${params}`, {
       mode: 'no-cors',
       keepalive: true,
@@ -49,10 +54,26 @@ export function trackAppOpen() {
 }
 
 /**
+ * The events of one daily pacing snapshot: a single event naming the
+ * learner's week and pace together (`week-4-behind`; `gd-week-13.5-on-track`
+ * for other programs), so the dashboard can count learners by week, by pace
+ * and by both.
+ *
+ * One event, not one per fact. GoatCounter takes at most 4 hits a second
+ * from one device and refuses the rest, and the day's first open already
+ * sends 2 (trackAppOpen). The app used to send its program, week and pace
+ * separately, so the pace, sent 5th, was mostly refused. src/metrics/model.js
+ * reads the older events too, so every series runs on.
+ */
+export function pacingEvents(paceStatus, program = 'da') {
+  const week = program === 'da' ? `week-${paceStatus.week}` : `${program}-week-${paceStatus.week}`
+  return [`${week}-${paceStatus.status}`]
+}
+
+/**
  * Aggregate pacing snapshot — at most once per device per calendar day, so
- * the dashboard reads as "daily active learners in program P / at week N /
- * status X". DA keeps its original bare `week-N` event names so existing
- * dashboards stay continuous; other programs prefix theirs (`cc-week-N`).
+ * each count reads as "learners active that day at week N with status X".
+ * The app does the once-a-day itself, so every hit counts (see send).
  */
 export function trackPacingDaily(paceStatus, program = 'da') {
   if (!enabled() || !paceStatus) return
@@ -63,7 +84,5 @@ export function trackPacingDaily(paceStatus, program = 'da') {
   } catch {
     return // storage unavailable — skip rather than over-count
   }
-  send(`program-${program}`)
-  send(program === 'da' ? `week-${paceStatus.week}` : `${program}-week-${paceStatus.week}`)
-  send(`status-${paceStatus.status}`)
+  for (const event of pacingEvents(paceStatus, program)) send(event, { everyHit: true })
 }

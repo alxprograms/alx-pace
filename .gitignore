@@ -7,3 +7,6 @@ dist-ssr
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Learner metrics: the workflow's checkout of the metrics branch, or local sample data
+metrics-data/
