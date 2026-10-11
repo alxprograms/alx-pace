@@ -8,7 +8,7 @@
  * (handlers/api.go, hit_list.go): 4 requests a second and 500 an hour per key.
  *
  * A 429, a 5xx or a dropped connection is tried again, up to MAX_RETRIES
- * times, so one bad moment doesn't cost a day's run. `fetchImpl` and `sleep`
+ * times, so one bad moment doesn't cost a day's run; a 404 once (see getJSON). `fetchImpl` and `sleep`
  * are injectable so the paging and the retries can be tested without a
  * network.
  */
@@ -52,6 +52,7 @@ export async function fetchDailyHits({ site, token, from, to, fetchImpl = fetch,
 }
 
 async function getJSON(url, token, fetchImpl, sleep) {
+  let retried404 = false
   for (let attempt = 0; ; attempt++) {
     let res
     try {
@@ -73,11 +74,24 @@ async function getJSON(url, token, fetchImpl, sleep) {
       await sleep(Number.isFinite(reset) && reset > 0 ? reset * 1000 : 2000 * 2 ** attempt)
       continue
     }
+    if (res.status === 404 && !retried404) {
+      /*
+        GoatCounter answers 404 "not found" to a key's first request in 24
+        hours, whatever is asked. Noting the key's last use loses which user
+        it belongs to (handlers/api.go: token.Touch, then user.ByID with user
+        id 0), and the next request, which skips that step, works. A daily
+        job is that first request nearly every day, so it asks once more.
+      */
+      retried404 = true
+      await sleep(SPACING_MS)
+      continue
+    }
     if (!res.ok) {
       // The body names the problem ("invalid API key", "no permission"); the
       // token is never part of the message.
       const text = await res.text().catch(() => '')
-      throw new GoatCounterError(`GoatCounter ${res.status}: ${text.slice(0, 300)}`)
+      const hint = res.status === 404 ? ' (is GOATCOUNTER_SITE the site this key belongs to?)' : ''
+      throw new GoatCounterError(`GoatCounter ${res.status}: ${text.slice(0, 300)}${hint}`)
     }
     return res.json()
   }
