@@ -802,7 +802,7 @@ function UniqueLearners({ unique, oneDay, period, peak, peakDays, dayName }) {
           {atMost === 0
             ? `No learners were counted ${oneDay ? 'that day' : 'in these days'}.`
             : oneDay
-              ? `Counted ${period}, each learner once that day.`
+              ? `Counted ${period}, each learner about once that day.`
               : single
                 ? `All counted on one day, ${dayName(peak.day)}, so the range is one number.`
                 : `Somewhere in this range, ${period}. No exact count is possible.`}
@@ -845,7 +845,8 @@ function UniqueLearners({ unique, oneDay, period, peak, peakDays, dayName }) {
           {oneDay && atMost > 0 && <p>Pick more than one day and this becomes a range.</p>}
           <p>
             Counted means counted in one browser: a learner who uses Pace in two, a phone and a laptop say, counts as two, and so can one who
-            opens it either side of midnight. Learners whose browser asks not to be tracked aren’t counted at all.
+            opens it either side of midnight. Before 11 October, learners sharing a network and a kind of browser could be counted as one.
+            Learners whose browser asks not to be tracked aren’t counted at all.
           </p>
         </div>
       </div>

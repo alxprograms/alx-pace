@@ -220,7 +220,7 @@ describe('a stretch of days', () => {
     expect(s.peak).toEqual({ day: '2026-10-06', active: 20 })
     // Unique learners, as a range: at least the busiest day's 20, at most one per learner-day.
     expect(s.unique).toEqual({ atLeast: 20, atMost: 30 })
-    // One day is exact.
+    // One day: the range is one number.
     expect(summarize(series(days, '2026-10-06', '2026-10-06')).unique).toEqual({ atLeast: 20, atMost: 20 })
     expect(s.statusShare.behind).toBeCloseTo(2 / 30)
     expect(s.installed).toBe(1)
