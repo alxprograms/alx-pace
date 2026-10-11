@@ -216,11 +216,13 @@ secret alone changes nothing on the client.
 Analytics is **active**: `GOATCOUNTER_SITE = 'alxpace'`. Plain GET beacons, no
 vendor script, DNT and GPC honoured, aggregate counts only.
 
-- **GoatCounter refuses a 5th hit within a second from one device** (its
-  `/count` limit is 4/s per IP and browser). The day's first open sends 3:
-  `/`, `open-*`, and the one daily event, `week-N-<status>`. Adding a beacon
-  to that burst loses data silently; `analytics.test.js` holds it at 4 or
-  fewer. From 4 to ~11 Oct 2026 the app sent 5, and most paces were refused.
+- **Keep the first open of a day at 4 hits or fewer.** GoatCounter's published
+  `/count` limit is 4/s per IP and browser, and a refused beacon is lost
+  silently. The day's first open sends 3: `/`, `open-*`, and the one daily
+  event, `week-N-<status>`; `analytics.test.js` holds it at 4 or fewer. (From
+  4 to 11 Oct 2026 the app sent 5; the real counts show the hosted service let
+  them all through, so that limit isn't enforced as published, but don't rely
+  on it.)
 - The daily event is sent with `ns=true` (count every hit): the app already
   sends it once a day, and GoatCounter's own 8-hour sessions would merge
   learners behind one address.
@@ -247,9 +249,21 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC)
 - The service worker leaves `metrics/` to the network: the page and every file
   it loads live under that path.
 - The Slack digest posts each week once, on the Monday or the first run after;
-  the last week posted is in `digest.json` on the `metrics` branch.
+  the last week posted is in `digest.json` on the `metrics` branch. The
+  numbers are pushed before it posts, so its button links a week already
+  published; keep that order.
 - Secrets `GOATCOUNTER_API_KEY` (read-only stats key) and `SLACK_WEBHOOK_URL`
   are the owner's to add. Without them each step is a logged no-op, never red.
+- What the page shows lives in its address (`src/metrics/dashboard/range.js`):
+  `?range=7|30|90|all` or `?from=&to=` days, clamped to the days on record.
+  The Slack digest's button links its week that way.
+- Visits lead the page and the digest: GoatCounter's own count (every path's
+  visits, events included), which is what its dashboard shows.
+- Every number on the page and in the digest is an exact count, never an
+  average: learners on one day, learner-days (one learner on one day) over
+  several. Unique learners over several days can't be counted, since nothing
+  identifies a learner from one day to the next; don't label learner-days as
+  learners. `metrics.test.js` fails on a decimal in the digest.
 - `?data=<url>` points the page at another file, under `npm run dev` only.
   `scripts/metrics/sample.mjs` makes one; README has the commands.
 

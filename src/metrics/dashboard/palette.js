@@ -6,14 +6,14 @@
  *   pace   behind #B98A12 · on track #5B8CFF · ahead #079A55
  *          all checks pass; worst adjacent pair ΔE 24.7 under deuteranopia.
  *   lime   #C4E878, the ALX accent: learner counts, everywhere (12.5:1).
- *   muted  daily columns behind the average line, de-emphasised.
  *
  * Text never wears these: labels and values stay in the text tokens, and a
  * coloured mark beside them carries the identity.
  */
 export const SURFACE = '#0B1645'
 export const LIME = '#C4E878'
-export const DAILY = 'rgba(168, 186, 255, 0.28)'
+/** A column under the pointer: the lime, lighter. */
+export const LIME_HOVER = '#E2F5B4'
 export const GRID = 'rgba(255, 255, 255, 0.08)'
 export const PACE = {
   behind: { color: '#B98A12', label: 'Behind' },

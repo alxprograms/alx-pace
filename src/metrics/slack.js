@@ -7,12 +7,13 @@
  */
 import { DASHBOARD_URL } from './config.js'
 
+const fmtInt = (n) => Math.round(n).toLocaleString('en-GB')
+
 const PROGRAM_NAMES = { da: 'Data Analytics', cc: 'Content Creation', gd: 'Graphic Design' }
 
 const fmtDay = (day, opts) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { timeZone: 'UTC', ...opts })
 const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`)
-const oneDecimal = (n) => (Math.round(n * 10) / 10).toLocaleString('en-GB')
 const signed = (x) => {
   if (x == null) return 'no earlier week to compare'
   const p = Math.round(x * 100)
@@ -38,20 +39,28 @@ export function digestMessage(d) {
             text: 'No learner activity was counted this week. If the app was used, check the metrics job in GitHub Actions.',
           },
         },
-        link(),
+        link(d),
       ],
     }
   }
 
-  const headline = `*${oneDecimal(d.avgActive)}* active learners a day on average (${signed(d.avgActiveChange)})`
-  const pace = STATUS_LINE(d.statusShare)
-  const busiest = d.topWeeks.length
-    ? d.topWeeks.map((w) => `${weekLabel(w.week)} (${oneDecimal(w.avg)} a day)`).join(' · ')
-    : '–'
-  const peak = d.peak ? `${fmtDay(d.peak.day, { weekday: 'long' })}, ${d.peak.active} learners` : '–'
+  // Visits first: GoatCounter's own number, the one its dashboard shows.
+  // Every number is a count, never an average: learners are people.
+  const headline = [
+    `*${fmtInt(d.visits)}* visits on GoatCounter (${signed(d.visitsChange)})`,
+    `*${fmtInt(d.learnerDays)}* learner-days: each learner counted once for each day they opened Pace (${signed(d.learnerDaysChange)})`,
+  ].join('\n')
+  const pace = STATUS_LINE(d.status, d.statusShare)
+  const busiest = d.topWeeks.length ? d.topWeeks.map((w) => `${weekLabel(w.week)}: ${fmtInt(w.learnerDays)}`).join(' · ') : '–'
+  const peakLearners = `${fmtInt(d.peak?.active ?? 0)} ${d.peak?.active === 1 ? 'learner' : 'learners'}`
+  const peak = !d.peak
+    ? '–'
+    : d.peakDays > 1
+      ? `${peakLearners}, on ${d.peakDays} days`
+      : `${fmtDay(d.peak.day, { weekday: 'long', day: 'numeric', month: 'short' })}, ${peakLearners}`
 
   return {
-    text: `${title}: ${oneDecimal(d.avgActive)} active learners a day`,
+    text: `${title}: ${fmtInt(d.visits)} visits, ${fmtInt(d.learnerDays)} learner-days`,
     blocks: [
       { type: 'header', text: { type: 'plain_text', text: title } },
       { type: 'section', text: { type: 'mrkdwn', text: headline } },
@@ -60,17 +69,17 @@ export function digestMessage(d) {
         fields: [
           { type: 'mrkdwn', text: `*Pace*\n${pace}` },
           { type: 'mrkdwn', text: `*Busiest day*\n${peak}` },
-          { type: 'mrkdwn', text: `*Where learners are*\n${busiest}` },
-          { type: 'mrkdwn', text: `*Learner-days*\n${d.learnerDays} · ${pct(d.installedShare)} of visits from the installed app` },
+          { type: 'mrkdwn', text: `*Where learners are* (learner-days)\n${busiest}` },
+          { type: 'mrkdwn', text: `*App opens*\n${fmtInt(d.installed + d.browser)} · ${fmtInt(d.installed)} from the installed app (${pct(d.installedShare)})` },
         ],
       },
-      link(),
+      link(d),
       {
         type: 'context',
         elements: [
           {
             type: 'mrkdwn',
-            text: 'Devices counted once a day each; learners who opt out of tracking are not counted.',
+            text: 'Visits are every page view and event GoatCounter recorded; a learner-day is one learner on one day they opened Pace. The dashboard explains both. Learners who opt out of tracking are not counted.',
           },
         ],
       },
@@ -78,16 +87,19 @@ export function digestMessage(d) {
   }
 }
 
-const STATUS_LINE = (s) =>
-  `On track ${pct(s['on-track'])} · Behind ${pct(s.behind)} · Ahead ${pct(s.ahead)}`
+const STATUS_LINE = (counts, shares) =>
+  [['on-track', 'On track'], ['behind', 'Behind'], ['ahead', 'Ahead']]
+    .map(([k, label]) => `${label} ${fmtInt(counts[k])} (${pct(shares[k])})`)
+    .join(' · ')
 
-const link = () => ({
+/** The dashboard, opened on the digest's week. */
+const link = (d) => ({
   type: 'actions',
   elements: [
     {
       type: 'button',
       text: { type: 'plain_text', text: 'Open the dashboard' },
-      url: DASHBOARD_URL,
+      url: `${DASHBOARD_URL}?from=${d.from}&to=${d.to}`,
     },
   ],
 })

@@ -149,9 +149,7 @@ export function readFile(file, { until } = {}) {
  * The app has sent three sets of daily events (src/lib/analytics.js), and a
  * day can hold more than one while learners' apps update:
  *   from 20 Jul 2026  week-4, status-behind
- *   from 4 Oct 2026   program-da, week-4, status-behind; the pace came fifth
- *                     in a burst, over GoatCounter's 4 a second, and was
- *                     mostly refused
+ *   from 4 Oct 2026   program-da, week-4, status-behind
  *   from Oct 2026     week-4-behind, alone
  * Each sends exactly one week event a day for every active learner, plain or
  * with the pace, so a program's week events added up are its active
@@ -179,14 +177,11 @@ export function readDay(counts = {}, program = 'da') {
       status[m[2]] += n
     }
   }
-  const active = Object.values(weeks).reduce((a, b) => a + b, 0)
-  // From 4 Oct the old pace event was mostly refused, leaving the paces of a
-  // few learners a day. A pace for fewer than half the day's learners is that
-  // loss, not a sample of them, so it reads as not counted.
-  const paced = STATUSES.reduce((a, s) => a + status[s], 0)
-  if (paced * 2 < active) for (const s of STATUSES) status[s] = 0
   return {
-    active,
+    active: Object.values(weeks).reduce((a, b) => a + b, 0),
+    // GoatCounter's own count: every path's visits, events included.
+    visits: Object.values(counts).reduce((a, b) => a + b, 0),
+    paths: counts,
     status,
     weeks,
     weekStatus,
@@ -208,9 +203,10 @@ const share = (part, whole) => (whole > 0 ? part / whole : null)
 export const byWeek = (a, b) => Number(a) - Number(b)
 
 /**
- * A stretch of days summed up: average daily active learners, learner-days,
- * the pace mix, installed share, where learners are by week, and the same by
- * week and pace where the combined events have been counted.
+ * A stretch of days summed up, in exact counts: learner-days (one learner on
+ * one day), the busiest day, the pace mix, installed share, where learners
+ * are by week, and the same by week and pace where the combined events have
+ * been counted.
  */
 export function summarize(rows) {
   const n = rows.length
@@ -229,10 +225,13 @@ export function summarize(rows) {
   const installed = sum(rows, (r) => r.installed)
   const browser = sum(rows, (r) => r.browser)
   const peak = rows.reduce((best, r) => (r.active > (best?.active ?? -1) ? r : best), null)
+  const paths = {}
+  for (const r of rows) for (const [p, c] of Object.entries(r.paths ?? {})) paths[p] = (paths[p] ?? 0) + c
   return {
     days: n,
+    visits: sum(rows, (r) => r.visits ?? 0),
+    paths,
     learnerDays,
-    avgActive: n > 0 ? learnerDays / n : 0,
     peak: peak && peak.active > 0 ? { day: peak.day, active: peak.active } : null,
     status: statusTotals,
     statusShare: Object.fromEntries(STATUSES.map((s) => [s, share(statusTotals[s], statusAll)])),
@@ -288,14 +287,32 @@ export function mostBehindWeek(weekStatus, minimum = 10) {
   return best
 }
 
-/** The trailing average of `pick` over `window` days, null until the window is full. */
-export function movingAverage(rows, pick, window = 7) {
-  return rows.map((_, i) => {
-    if (i + 1 < window) return null
-    let total = 0
-    for (let j = i + 1 - window; j <= i; j++) total += pick(rows[j])
-    return total / window
-  })
+/**
+ * GoatCounter's dashboard lists its top `limit` paths (10 unless changed in
+ * its settings) and says "N out of M visits shown": N is what those paths
+ * hold, M is every visit. The same for a stretch of days here.
+ */
+export function shownVisits(paths, limit = 10) {
+  return Object.values(paths)
+    .sort((a, b) => b - a)
+    .slice(0, limit)
+    .reduce((a, b) => a + b, 0)
+}
+
+/**
+ * What the visits were: app opens (the page view), how the app was opened,
+ * and the daily week-and-pace events (program, week and pace, in every set
+ * the app has sent). Anything else, such as a test hit, is `other`.
+ */
+export function visitKinds(paths) {
+  const kinds = { opens: 0, howOpened: 0, weekPace: 0, other: 0 }
+  for (const [p, n] of Object.entries(paths)) {
+    if (p === '/') kinds.opens += n
+    else if (p.startsWith('open-')) kinds.howOpened += n
+    else if (/^(program-|status-|(?:[a-z]+-)?week-)/.test(p)) kinds.weekPace += n
+    else kinds.other += n
+  }
+  return kinds
 }
 
 /** The change from `before` to `after` as a fraction (0.12 = +12%); null with nothing before. */
@@ -309,21 +326,28 @@ export function weeklyDigest(days, today, program = 'da') {
   const thisMonday = mondayOf(today)
   const from = addDays(thisMonday, -7)
   const to = addDays(thisMonday, -1)
-  const week = summarize(series(days, from, to, program))
+  const rows = series(days, from, to, program)
+  const week = summarize(rows)
   const prior = summarize(series(days, addDays(from, -7), addDays(from, -1), program))
   const topWeeks = Object.entries(week.weeks)
     .sort(([wa, a], [wb, b]) => b - a || byWeek(wa, wb))
     .slice(0, 3)
-    .map(([w, learnerDays]) => ({ week: w, avg: learnerDays / 7 }))
+    .map(([w, learnerDays]) => ({ week: w, learnerDays }))
   return {
     from,
     to,
     program,
-    avgActive: week.avgActive,
-    avgActiveChange: change(week.avgActive, prior.avgActive),
+    visits: week.visits,
+    visitsChange: change(week.visits, prior.visits),
     learnerDays: week.learnerDays,
+    learnerDaysChange: change(week.learnerDays, prior.learnerDays),
     peak: week.peak,
+    // Days that share the peak: more than one, and no single day was busiest.
+    peakDays: week.peak ? rows.filter((r) => r.active === week.peak.active).length : 0,
+    status: week.status,
     statusShare: week.statusShare,
+    installed: week.installed,
+    browser: week.browser,
     installedShare: week.installedShare,
     topWeeks,
     hasData: week.learnerDays > 0 || week.opens > 0,

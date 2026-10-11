@@ -23,8 +23,6 @@ const to = args.includes('--today') ? args[args.indexOf('--today') + 1] : todayU
 // When each set of events began (the third is this change's; a guess at its deploy).
 const PROGRAM_FROM = '2026-10-04'
 const SINGLE_FROM = '2026-10-12'
-// Of the old pace events, sent fifth in a burst, the share GoatCounter let through.
-const PACE_THROUGH = 0.04
 
 let seed = 42
 const rand = () => ((seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32)
@@ -55,11 +53,7 @@ dayRange(COLLECT_FROM, to).forEach((day, i) => {
       STATUSES.forEach((s, k) => parts[k] > 0 && (counts[`week-${w}-${s}`] = parts[k]))
     } else {
       counts[`week-${w}`] = n
-      const through = day >= PROGRAM_FROM ? PACE_THROUGH : 1
-      STATUSES.forEach((s, k) => {
-        const kept = Math.round(parts[k] * through + (through < 1 && rand() < parts[k] * through % 1 ? 1 : 0))
-        if (kept > 0) counts[`status-${s}`] = (counts[`status-${s}`] ?? 0) + kept
-      })
+      STATUSES.forEach((s, k) => parts[k] > 0 && (counts[`status-${s}`] = (counts[`status-${s}`] ?? 0) + parts[k]))
     }
   }
   days[day] = Object.fromEntries(Object.entries(counts).filter(([, n]) => n > 0))

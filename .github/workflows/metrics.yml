@@ -64,17 +64,8 @@ jobs:
           GOATCOUNTER_API_KEY: ${{ secrets.GOATCOUNTER_API_KEY }}
         run: node scripts/metrics/collect.mjs --dir metrics-data
 
-      # Every day: digest.mjs posts a week only once (it keeps the last week
-      # posted in digest.json), so a Monday that failed is caught up the next
-      # morning. Never on numbers a failed collection left half-done.
-      - name: Post last week's digest to Slack, once
-        if: steps.collect.outcome == 'success'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          FORCE: ${{ inputs.digest }}
-        run: node scripts/metrics/digest.mjs --dir metrics-data
-
-      # Runs even when the digest failed, so the numbers are never lost to Slack.
+      # Before the digest, so its "Open the dashboard" button finds the week it
+      # links already published; and whatever the digest does, the numbers keep.
       - name: Commit the numbers to the metrics branch
         if: always() && steps.worktree.outcome == 'success'
         working-directory: metrics-data
@@ -91,4 +82,33 @@ jobs:
           git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
               commit --quiet -m "Learner metrics to $(date -u +%F)"
+          git push --quiet origin HEAD:refs/heads/metrics
+
+      # Every day: digest.mjs posts a week only once (it keeps the last week
+      # posted in digest.json), so a Monday that failed is caught up the next
+      # morning. Never on numbers a failed collection left half-done.
+      - name: Post last week's digest to Slack, once
+        if: steps.collect.outcome == 'success'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          FORCE: ${{ inputs.digest }}
+        run: node scripts/metrics/digest.mjs --dir metrics-data
+
+      # digest.json: which week went to Slack, so it isn't posted twice.
+      - name: Record the digest posted
+        if: always() && steps.worktree.outcome == 'success'
+        working-directory: metrics-data
+        run: |
+          if [ ! -f metrics.json ]; then
+            echo "Nothing collected."
+            exit 0
+          fi
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No digest posted."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit --quiet -m "Slack digest posted $(date -u +%F)"
           git push --quiet origin HEAD:refs/heads/metrics

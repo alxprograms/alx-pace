@@ -124,18 +124,27 @@ weeks, `gd-week-5-behind`). Never anything identifying a learner. Do Not Track
 and Global Privacy Control are honored, and no third-party script runs (plain
 GET beacons).
 
-One daily event, not one per fact: GoatCounter takes at most 4 hits a second
-from one device and refuses the rest, and the day's first open already sends
-two. From 4 October the app sent program, week and pace separately, five hits
-in all, so most paces were refused; the dashboard shows those days without a
-pace. It reads every set of events the app has sent since 20 July (see
-`readDay` in [`src/metrics/model.js`](src/metrics/model.js)).
+One daily event, not one per fact: GoatCounter's published limit is 4 hits a
+second from one device, and the day's first open already sends two. From
+4 October the app sent program, week and pace separately, five hits in all;
+the hosted service let them through, but one event keeps well inside the
+limit. The dashboard reads every set of events the app has sent since 20 July
+(see `readDay` in [`src/metrics/model.js`](src/metrics/model.js)).
 
 **The dashboard** at
 [alxprograms.github.io/alx-pace/metrics/](https://alxprograms.github.io/alx-pace/metrics/)
-turns those counts into charts: active learners a day, the pace mix, and where
-in the course learners are, for the last 7, 30 or 90 days or everything, with
-what each chart says written beside it. The numbers are public, like the repo.
+leads with GoatCounter's own number, its **visits** (every page view and event
+it recorded, the "N out of M visits shown" on its page), with what a visit is
+written beside it. Then the charts: active learners each day, the pace mix,
+and where in the course learners are, with what each chart says written
+beside it. Every number is an exact count, never an average: learners on one
+day, and over several days **learner-days** (one learner on one day), since
+nothing tells the same learner apart from one day to the next. Pick the last
+7, 30 or 90 days, everything, or any day or dates in the date boxes (or click
+a day's column); the choice stays in the address
+(`?from=2026-10-05&to=2026-10-11`, `?range=all`), so a link opens the same
+view, and the Slack digest's button opens its own week. The numbers are
+public, like the repo.
 
 **How it stays current, with nobody updating it:**
 
@@ -151,9 +160,10 @@ The numbers live on their own `metrics` branch, never `main`: a commit to
 the real ones. The dashboard reads the file straight from GitHub, so new
 numbers show without a deploy.
 
-The digest covers last Monday to Sunday and goes out on the Monday. If that
-run fails, or GitHub skips it, the next morning's run posts it instead: the
-last week posted is kept in `digest.json` beside the numbers.
+The digest covers last Monday to Sunday and goes out on the Monday, after
+that morning's numbers are pushed, so its *Open the dashboard* button finds
+its week. If that run fails, or GitHub skips it, the next morning's run posts
+it instead: the last week posted is kept in `digest.json` beside the numbers.
 
 The dashboard is its own build (`vite.metrics.config.js`), run by `npm run
 build` after the app's, into `dist/metrics/`. Built apart, it can't change a

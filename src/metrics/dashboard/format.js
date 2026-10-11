@@ -2,13 +2,6 @@
 
 export const fmtInt = (n) => Math.round(n).toLocaleString('en-GB')
 
-/** One decimal below 100 ("12.4"), whole numbers above ("1,284"). */
-export const fmtOne = (n) =>
-  n >= 100 ? fmtInt(n) : (Math.round(n * 10) / 10).toLocaleString('en-GB', { maximumFractionDigits: 1 })
-
-/** An average for display: one decimal, and '<0.1' for one that would round to a false 0. */
-export const fmtAvg = (n) => (n > 0 && n < 0.05 ? '<0.1' : fmtOne(n))
-
 export const fmtPct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`)
 
 export const fmtDay = (day, opts = { day: 'numeric', month: 'short' }) =>
