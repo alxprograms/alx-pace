@@ -180,19 +180,12 @@ describe('what a day says', () => {
   })
 
   it('counts each learner once on a day when apps are part-way through an update', () => {
-    // 4 Oct – now: program, week and a mostly-refused pace; then the new single event.
+    // 4 Oct – now: program, week and pace; then the new single event.
     const d = readDay({ 'program-da': 9, 'week-4': 9, 'status-behind': 1, 'week-4-behind': 2, 'week-5-on-track': 3, 'cc-week-2': 1, 'status-ahead': 1 })
     expect(d.active).toBe(14)
     expect(d.weeks).toEqual({ 4: 11, 5: 3 })
     expect(d.status).toEqual({ behind: 3, 'on-track': 3, ahead: 1 })
     expect(readDay({ 'program-cc': 1, 'cc-week-2': 1, 'status-ahead': 1 }, 'cc').status.ahead).toBe(0)
-  })
-
-  it('reads the pace of a day when most of it was refused as not counted, not as the mix', () => {
-    // 4–11 Oct: 1 pace got through for 9 learners.
-    const d = readDay({ 'program-da': 9, 'week-4': 9, 'status-behind': 1 })
-    expect(d.active).toBe(9)
-    expect(d.status).toEqual({ behind: 0, 'on-track': 0, ahead: 0 })
   })
 })
 

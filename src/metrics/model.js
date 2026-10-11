@@ -149,9 +149,7 @@ export function readFile(file, { until } = {}) {
  * The app has sent three sets of daily events (src/lib/analytics.js), and a
  * day can hold more than one while learners' apps update:
  *   from 20 Jul 2026  week-4, status-behind
- *   from 4 Oct 2026   program-da, week-4, status-behind; the pace came fifth
- *                     in a burst, over GoatCounter's 4 a second, and was
- *                     mostly refused
+ *   from 4 Oct 2026   program-da, week-4, status-behind
  *   from Oct 2026     week-4-behind, alone
  * Each sends exactly one week event a day for every active learner, plain or
  * with the pace, so a program's week events added up are its active
@@ -179,14 +177,8 @@ export function readDay(counts = {}, program = 'da') {
       status[m[2]] += n
     }
   }
-  const active = Object.values(weeks).reduce((a, b) => a + b, 0)
-  // From 4 Oct the old pace event was mostly refused, leaving the paces of a
-  // few learners a day. A pace for fewer than half the day's learners is that
-  // loss, not a sample of them, so it reads as not counted.
-  const paced = STATUSES.reduce((a, s) => a + status[s], 0)
-  if (paced * 2 < active) for (const s of STATUSES) status[s] = 0
   return {
-    active,
+    active: Object.values(weeks).reduce((a, b) => a + b, 0),
     status,
     weeks,
     weekStatus,

@@ -216,11 +216,13 @@ secret alone changes nothing on the client.
 Analytics is **active**: `GOATCOUNTER_SITE = 'alxpace'`. Plain GET beacons, no
 vendor script, DNT and GPC honoured, aggregate counts only.
 
-- **GoatCounter refuses a 5th hit within a second from one device** (its
-  `/count` limit is 4/s per IP and browser). The day's first open sends 3:
-  `/`, `open-*`, and the one daily event, `week-N-<status>`. Adding a beacon
-  to that burst loses data silently; `analytics.test.js` holds it at 4 or
-  fewer. From 4 to ~11 Oct 2026 the app sent 5, and most paces were refused.
+- **Keep the first open of a day at 4 hits or fewer.** GoatCounter's published
+  `/count` limit is 4/s per IP and browser, and a refused beacon is lost
+  silently. The day's first open sends 3: `/`, `open-*`, and the one daily
+  event, `week-N-<status>`; `analytics.test.js` holds it at 4 or fewer. (From
+  4 to 11 Oct 2026 the app sent 5; the real counts show the hosted service let
+  them all through, so that limit isn't enforced as published, but don't rely
+  on it.)
 - The daily event is sent with `ns=true` (count every hit): the app already
   sends it once a day, and GoatCounter's own 8-hour sessions would merge
   learners behind one address.

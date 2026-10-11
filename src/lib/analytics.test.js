@@ -5,9 +5,9 @@ import { pacingEvents, trackAppOpen, trackPacingDaily } from './analytics'
 /*
   The daily pacing snapshot. Program, week and pace used to be separate
   events, so the counts could not say how many learners in Week 4 were
-  behind, and the pace, sent fifth in a burst, was mostly refused by
-  GoatCounter's limit of 4 hits a second from one device. One event now
-  carries week and pace together.
+  behind, and the first open sent 5 hits in a burst, over GoatCounter's
+  published limit of 4 a second from one device. One event now carries week
+  and pace together.
 */
 describe('the daily pacing events', () => {
   it('names a Data Analytics learner’s week and pace in one event', () => {

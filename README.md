@@ -124,12 +124,12 @@ weeks, `gd-week-5-behind`). Never anything identifying a learner. Do Not Track
 and Global Privacy Control are honored, and no third-party script runs (plain
 GET beacons).
 
-One daily event, not one per fact: GoatCounter takes at most 4 hits a second
-from one device and refuses the rest, and the day's first open already sends
-two. From 4 October the app sent program, week and pace separately, five hits
-in all, so most paces were refused; the dashboard shows those days without a
-pace. It reads every set of events the app has sent since 20 July (see
-`readDay` in [`src/metrics/model.js`](src/metrics/model.js)).
+One daily event, not one per fact: GoatCounter's published limit is 4 hits a
+second from one device, and the day's first open already sends two. From
+4 October the app sent program, week and pace separately, five hits in all;
+the hosted service let them through, but one event keeps well inside the
+limit. The dashboard reads every set of events the app has sent since 20 July
+(see `readDay` in [`src/metrics/model.js`](src/metrics/model.js)).
 
 **The dashboard** at
 [alxprograms.github.io/alx-pace/metrics/](https://alxprograms.github.io/alx-pace/metrics/)

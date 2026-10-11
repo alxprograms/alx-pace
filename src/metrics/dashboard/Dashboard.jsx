@@ -259,8 +259,7 @@ function Report({ file, range }) {
   const rangeText = `${fmtDay(view.from)} – ${fmtDay(view.to, { day: 'numeric', month: 'short', year: 'numeric' })}`
   const paceAll = STATUSES.reduce((a, k) => a + s.status[k], 0)
   const priorPaceAll = STATUSES.reduce((a, k) => a + prior.status[k], 0)
-  // Days with learners but no pace: from 4 Oct the old pace event was mostly
-  // refused (see readDay), and those days read as not counted.
+  // Days with learners but no pace counted, left out of the pace shares.
   const unpaced = rows.filter((r) => r.active > 0 && STATUSES.every((k) => r.status[k] === 0)).length
   const rhythm = weekdayPattern(rows)
   const topWeek = view.weeks.reduce((best, w) => (w.avg > (best?.avg ?? 0) ? w : best), null)
@@ -512,8 +511,8 @@ function Report({ file, range }) {
 function UnpacedNote({ days }) {
   return (
     <p>
-      {days ? `On ${days} ${days === 1 ? 'day' : 'days'} with learners, pace wasn’t counted` : 'Pace wasn’t counted'}: from 4 October
-      until the app was updated, GoatCounter refused most learners’ pace. Those days are left out of the shares, and show no column.
+      {days ? `On ${days} ${days === 1 ? 'day' : 'days'} with learners, no pace was counted` : 'No pace was counted'}, so{' '}
+      {days === 1 ? 'that day is' : 'those days are'} left out of the shares and show no column.
     </p>
   )
 }

@@ -59,11 +59,12 @@ export function trackAppOpen() {
  * for other programs), so the dashboard can count learners by week, by pace
  * and by both.
  *
- * One event, not one per fact. GoatCounter takes at most 4 hits a second
- * from one device and refuses the rest, and the day's first open already
- * sends 2 (trackAppOpen). The app used to send its program, week and pace
- * separately, so the pace, sent 5th, was mostly refused. src/metrics/model.js
- * reads the older events too, so every series runs on.
+ * One event, not one per fact. GoatCounter's published limit is 4 hits a
+ * second from one device, and the day's first open already sends 2
+ * (trackAppOpen). The app used to send its program, week and pace separately,
+ * 5 hits in all; the hosted service let them through, but one event keeps
+ * well inside the limit and keeps week and pace together.
+ * src/metrics/model.js reads the older events too, so every series runs on.
  */
 export function pacingEvents(paceStatus, program = 'da') {
   const week = program === 'da' ? `week-${paceStatus.week}` : `${program}-week-${paceStatus.week}`
