@@ -233,6 +233,11 @@ export function summarize(rows) {
     paths,
     learnerDays,
     peak: peak && peak.active > 0 ? { day: peak.day, active: peak.active } : null,
+    // Unique learners: nothing identifies a learner from one day to the next,
+    // so over several days only a range, of the learners counted. At least the
+    // most on any one day (each counted once a day, in each browser), at most
+    // one per learner-day. They meet when every learner counted was on one day.
+    unique: { atLeast: peak && peak.active > 0 ? peak.active : 0, atMost: learnerDays },
     status: statusTotals,
     statusShare: Object.fromEntries(STATUSES.map((s) => [s, share(statusTotals[s], statusAll)])),
     installed,
@@ -357,6 +362,8 @@ export function weeklyDigest(days, today, program = 'da') {
     visitsChange: change(week.visits, prior.visits),
     learnerDays: week.learnerDays,
     learnerDaysChange: change(week.learnerDays, prior.learnerDays),
+    unique: week.unique,
+    uniqueTotal: all.unique,
     peak: week.peak,
     // Days that share the peak: more than one, and no single day was busiest.
     peakDays: week.peak ? rows.filter((r) => r.active === week.peak.active).length : 0,

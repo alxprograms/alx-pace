@@ -139,7 +139,9 @@ written beside it. Then the charts: active learners each day, the pace mix,
 and where in the course learners are, with what each chart says written
 beside it. Every number is an exact count, never an average: learners on one
 day, and over several days **learner-days** (one learner on one day), since
-nothing tells the same learner apart from one day to the next. Pick the last
+nothing tells the same learner apart from one day to the next. For the same
+reason **unique learners** over several days are a range: at least the most on
+any one day, at most one per learner-day. Pick the last
 7, 30 or 90 days, everything, or any day or dates in the date boxes (or click
 a day's column); the choice stays in the address
 (`?from=2026-10-05&to=2026-10-11`, `?range=all`), so a link opens the same
