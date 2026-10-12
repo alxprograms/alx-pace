@@ -145,13 +145,13 @@ any one day, at most one per learner-day. Pick the last
 7, 30 or 90 days, everything, or any day or dates in the date boxes (or click
 a day's column); the choice stays in the address
 (`?from=2026-10-05&to=2026-10-11`, `?range=all`), so a link opens the same
-view, and the Slack digest's button opens its own week. The numbers are
+view, and the Slack digest's link opens its own week. The numbers are
 public, like the repo.
 
 **How it stays current, with nobody updating it:**
 
 ```
-GoatCounter ──API──▶ .github/workflows/metrics.yml (daily, 05:23 UTC)
+GoatCounter ──API──▶ .github/workflows/metrics.yml (daily 05:23 UTC, and Fridays 00:03 WAT)
                        ├─ scripts/metrics/collect.mjs → metrics.json on the `metrics` branch
                        └─ scripts/metrics/digest.mjs → Slack, once a week (digest.json)
 metrics.json ──raw.githubusercontent.com──▶ /metrics/ (the dashboard page)
@@ -162,12 +162,20 @@ The numbers live on their own `metrics` branch, never `main`: a commit to
 the real ones. The dashboard reads the file straight from GitHub, so new
 numbers show without a deploy.
 
-The digest covers last Monday to Sunday and goes out on the Monday, after
-that morning's numbers are pushed, so its *Open the dashboard* button finds
+The digest covers Friday to Thursday and goes out just after midnight on the
+Friday, West Africa Time (00:03 WAT, which is 23:03 UTC on the Thursday),
+after that run's numbers are pushed, so its *Open the dashboard* link finds
 its week. It leads with every visit since counting began on 20 July, up to
-the day before it posts (GoatCounter's running total, with its "N out of M
-visits shown"), then the week's own visits. If that run fails, or GitHub skips it, the next morning's run posts
+the day before it posts (GoatCounter's running total), then the week's own
+visits. The link is a plain link, not a button: Slack sends a button's click
+to the app, and a webhook has nothing to answer it with. GitHub can start a
+scheduled run late, or skip it when busy; then the next morning's run posts
 it instead: the last week posted is kept in `digest.json` beside the numbers.
+
+GoatCounter's days are UTC's, so its Thursday runs on to 01:00 WAT. The
+digest counts the week to midnight WAT; the hour after comes in with the
+next morning's numbers, so the dashboard's Thursday can end up a few visits
+above the digest's.
 
 The dashboard is its own build (`vite.metrics.config.js`), run by `npm run
 build` after the app's, into `dist/metrics/`. Built apart, it can't change a
@@ -181,8 +189,9 @@ single file of the app's.
 2. In Slack, create an app with an **Incoming Webhook** for the channel the
    digest goes to. Add its URL as the secret `SLACK_WEBHOOK_URL`.
 3. *Actions → Learner metrics → Run workflow*. The first run collects every
-   day since 20 July and posts last week's digest. (Tick *Post last week's
-   Slack digest again* to repeat one already posted.)
+   day since 20 July and posts the last full week's digest, Friday to
+   Thursday. (Tick *Post the last full week's Slack digest again* to repeat
+   one already posted.)
 
 Without the key the job collects nothing and says so; without the webhook it
 prints the digest in the log. Neither turns the run red.
@@ -412,7 +421,7 @@ src/
 │                            # WeekAccordion, CountdownState, GraduationState,
 │                            # StartDatePrompt, Footer
 ├── metrics/                 # the learner dashboard and the job that feeds it
-│   ├── model.js             #   counts → days → summaries, the Monday digest (pure)
+│   ├── model.js             #   counts → days → summaries, the Friday digest (pure)
 │   ├── goatcounter.js       #   GoatCounter API client (paging, rate limits)
 │   ├── slack.js             #   the digest as a Slack message
 │   └── dashboard/           #   the /metrics/ page (its own entry, styles and charts)

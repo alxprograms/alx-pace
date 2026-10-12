@@ -1,13 +1,15 @@
 /**
  * Where the learner-usage numbers come from and where they are kept.
  *
- * The app sends anonymous GoatCounter events (src/lib/analytics.js). Once a
- * day, .github/workflows/metrics.yml reads them back through GoatCounter's API
+ * The app sends anonymous GoatCounter events (src/lib/analytics.js). Every
+ * morning, and just after midnight West Africa Time on Fridays,
+ * .github/workflows/metrics.yml reads them back through GoatCounter's API
  * (scripts/metrics/collect.mjs) and commits one JSON file to the `metrics`
  * branch, never to `main`: a daily commit there would redeploy the app and tag
  * a rollback point every morning. The dashboard (metrics/index.html, deployed
- * with the app) fetches that file when it opens, and on Mondays the same job
- * posts a digest to Slack (scripts/metrics/digest.mjs).
+ * with the app) fetches that file when it opens, and just after midnight on
+ * Fridays, West Africa Time, the same job posts a digest of the week to Slack
+ * (scripts/metrics/digest.mjs).
  *
  * Imported by those Node scripts as well as by the dashboard, so every import
  * here and in its siblings names its file extension: plain Node cannot resolve

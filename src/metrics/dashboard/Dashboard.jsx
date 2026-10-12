@@ -6,7 +6,7 @@ import portrait4 from '../../assets/alx/banner-img4.webp'
 import portrait5 from '../../assets/alx/banner-img5.webp'
 import logo from '../../assets/alx/header-logo.svg'
 import { APP_URL, DATA_URL } from '../config.js'
-import { addDays, byWeek, change, mostBehindWeek, readFile, series, shownVisits, summarize, visitKinds, weekdayPattern, STATUSES } from '../model.js'
+import { addDays, byWeek, change, lastCompleteDay, mostBehindWeek, readFile, series, shownVisits, summarize, visitKinds, weekdayPattern, STATUSES } from '../model.js'
 import { DailyActiveChart, Legend, MeterDial, PaceDial, PaceMixChart, Sparkline, WeeksChart } from './charts.jsx'
 import { fmtChange, fmtDay, fmtInt, fmtPct } from './format.js'
 import { LIME, PACE, PACE_ORDER } from './palette.js'
@@ -23,8 +23,8 @@ import { chartWindow, pickDate, resolveRange, searchForSelection, selectionFromS
   One selection scopes everything on the page: a preset (the last 7, 30 or 90
   days, or all) or days picked by date, one day included (range.js). Every
   figure is compared with the same length of time just before it, once that
-  is all on record. Days run to the last complete one: the morning's file
-  also holds today so far, which would read as a drop.
+  is all on record. Days run to the last complete one (model.lastCompleteDay):
+  the morning's file also holds today so far, which would read as a drop.
 
   Visits lead the page: GoatCounter's own count, the number its dashboard
   shows, with what it is written beside it.
@@ -83,12 +83,6 @@ function useMetrics() {
   return state
 }
 
-/** The last day whose counts are complete: the day before the file was written, at the latest. */
-function lastCompleteDay(file) {
-  const written = file.updatedAt?.slice(0, 10)
-  return written && file.lastDay >= written ? addDays(written, -1) : file.lastDay
-}
-
 /**
  * The selection, kept in the page address: a link opens the same view, and
  * Back returns to the one before (a day picked from a chart, say). Choosing
@@ -125,7 +119,7 @@ export default function Dashboard() {
   const [selection, select, moved] = useSelection()
   const bounds = metrics.status === 'ready' ? { first: metrics.file.firstDay, last: lastCompleteDay(metrics.file) } : null
   const view = bounds ? resolveRange(selection, bounds.first, bounds.last) : null
-  // Days asked for (a Slack button, a shared link) that haven't been collected yet.
+  // Days asked for (the Slack digest's link, a shared one) that haven't been collected yet.
   const askedPast = bounds && !selection.preset && selection.to > bounds.last ? selection.to : null
 
   return (
@@ -426,6 +420,9 @@ function Report({ file, view, bounds, onSelect, askedPast }) {
   const updated = file.updatedAt
     ? new Date(file.updatedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' })
     : null
+  // Collected before GoatCounter's (UTC) day ended: the Friday run, at 00:03
+  // West Africa Time, counts Thursday to then, and the morning adds the rest.
+  const lastCutShort = to === bounds.last && updated && file.updatedAt < `${addDays(to, 1)}T00:00:00Z`
 
   return (
     <>
@@ -497,8 +494,10 @@ function Report({ file, view, bounds, onSelect, askedPast }) {
             </p>
             <p>
               It is GoatCounter’s own count, the total at the top of its page, where “N out of M visits shown” means the visits on the{' '}
-              {GOATCOUNTER_LISTED} paths it lists out of them all. Counted to the end of {fmtDay(to, { day: 'numeric', month: 'short' })}
-              {to === bounds.last ? '; GoatCounter’s page also counts today so far.' : ', the same as GoatCounter shows for these dates.'}
+              {GOATCOUNTER_LISTED} paths it lists out of them all.{' '}
+              {lastCutShort
+                ? `Counted to ${updated} West Africa Time, when these numbers were collected; GoatCounter’s ${fmtDay(to, { day: 'numeric', month: 'short' })} runs on to 01:00 there, and the morning’s numbers add its last hour.`
+                : `Counted to the end of ${fmtDay(to, { day: 'numeric', month: 'short' })}${to === bounds.last ? '; GoatCounter’s page also counts today so far.' : ', the same as GoatCounter shows for these dates.'}`}
             </p>
           </div>
         </div>

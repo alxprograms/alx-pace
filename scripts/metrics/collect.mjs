@@ -44,5 +44,5 @@ const file = buildFile(days, { site, updatedAt: new Date().toISOString() })
 
 await mkdir(dir, { recursive: true })
 await writeFile(path, stringifyFile(file))
-const last = file.days[addDays(to, -1)] ?? {}
-console.log(`${hits.length} paths, ${Object.keys(file.days).length} days stored. Yesterday: ${readDay(last).active} active Data Analytics learners.`)
+const before = addDays(to, -1)
+console.log(`${hits.length} paths, ${Object.keys(file.days).length} days stored. ${before}: ${readDay(file.days[before] ?? {}).active} active Data Analytics learners.`)

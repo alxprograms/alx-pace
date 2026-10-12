@@ -6,8 +6,8 @@ import {
   digestDue,
   hitsToDays,
   isDay,
+  lastCompleteDay,
   mergeDays,
-  mondayOf,
   mostBehindWeek,
   shownVisits,
   visitKinds,
@@ -16,6 +16,8 @@ import {
   readFile,
   series,
   summarize,
+  thursdayBefore,
+  todayWAT,
   weekdayPattern,
   weeklyDigest,
 } from './model.js'
@@ -26,7 +28,7 @@ import { APP_URL as APP_URL_OF_APP } from '../lib/appUrl'
 
 /*
   The learner-usage numbers, from GoatCounter's API to the stored file, and
-  from the file to the dashboard and the Monday digest. The API shapes are
+  from the file to the dashboard and the Friday digest. The API shapes are
   the ones in GoatCounter's own test data (handlers/testdata/api-hits-*.json):
   one `stats` entry per day of the range, zero days included, event paths
   without a leading slash.
@@ -47,10 +49,32 @@ describe('dates', () => {
     expect(dayRange('2026-10-04', '2026-10-06')).toEqual(['2026-10-04', '2026-10-05', '2026-10-06'])
   })
 
-  it('finds the Monday of a week, Sunday included', () => {
-    expect(mondayOf('2026-10-12')).toBe('2026-10-12') // Monday
-    expect(mondayOf('2026-10-18')).toBe('2026-10-12') // Sunday
-    expect(mondayOf('2026-10-10')).toBe('2026-10-05') // Saturday
+  it('finds the last Thursday before a day: the day before a Friday, a week before a Thursday', () => {
+    expect(thursdayBefore('2026-10-16')).toBe('2026-10-15') // Friday
+    expect(thursdayBefore('2026-10-15')).toBe('2026-10-08') // Thursday
+    expect(thursdayBefore('2026-10-18')).toBe('2026-10-15') // Sunday
+    expect(thursdayBefore('2026-10-14')).toBe('2026-10-08') // Wednesday
+  })
+
+  it('takes the day in West Africa, an hour ahead of UTC all year', () => {
+    expect(todayWAT(new Date('2026-10-15T22:59:59Z'))).toBe('2026-10-15')
+    expect(todayWAT(new Date('2026-10-15T23:00:00Z'))).toBe('2026-10-16')
+    expect(todayWAT(new Date('2026-12-31T23:30:00Z'))).toBe('2027-01-01')
+    // No daylight saving: the same hour in July.
+    expect(todayWAT(new Date('2026-07-01T23:00:00Z'))).toBe('2026-07-02')
+  })
+
+  it('counts a day complete once it has ended in West Africa', () => {
+    const file = (updatedAt, lastDay) => ({ updatedAt, lastDay })
+    // The morning's file holds today so far: yesterday is the last complete day.
+    expect(lastCompleteDay(file('2026-10-16T05:23:00Z', '2026-10-16'))).toBe('2026-10-15')
+    // The Friday digest's run, 00:03 there: the Thursday it links to is complete.
+    expect(lastCompleteDay(file('2026-10-15T23:03:00Z', '2026-10-15'))).toBe('2026-10-15')
+    // Run by hand before midnight there: Thursday isn't over yet.
+    expect(lastCompleteDay(file('2026-10-15T22:59:00Z', '2026-10-15'))).toBe('2026-10-14')
+    // Collecting stopped: the last day stored.
+    expect(lastCompleteDay(file('2026-10-16T05:23:00Z', '2026-10-12'))).toBe('2026-10-12')
+    expect(lastCompleteDay(file(null, '2026-10-12'))).toBe('2026-10-12')
   })
 })
 
@@ -275,46 +299,63 @@ describe('what the dashboard says about it', () => {
   })
 })
 
-describe('the Monday digest', () => {
-  // Week of 5–11 Oct 2026, and the week before it.
+describe('the Friday digest', () => {
+  // Week of Friday 9 – Thursday 15 Oct 2026, and the week before it.
   const days = {}
-  for (const d of dayRange('2026-09-28', '2026-10-04')) days[d] = { 'program-da': 10, 'week-3': 10, 'status-on-track': 10 }
-  for (const d of dayRange('2026-10-05', '2026-10-11')) {
+  for (const d of dayRange('2026-10-02', '2026-10-08')) days[d] = { 'program-da': 10, 'week-3': 10, 'status-on-track': 10 }
+  for (const d of dayRange('2026-10-09', '2026-10-15')) {
     days[d] = { 'program-da': 12, 'week-4': 8, 'week-5': 4, 'status-behind': 3, 'status-on-track': 9, 'open-installed': 3, 'open-browser': 9 }
   }
-  days['2026-10-07'] = { ...days['2026-10-07'], 'program-da': 19, 'week-4': 15 }
+  days['2026-10-14'] = { ...days['2026-10-14'], 'program-da': 19, 'week-4': 15 }
 
-  it('covers last Monday to Sunday, compared with the week before', () => {
-    const d = weeklyDigest(days, '2026-10-12')
-    expect([d.from, d.to]).toEqual(['2026-10-05', '2026-10-11'])
+  it('covers last Friday to Thursday, compared with the week before', () => {
+    const d = weeklyDigest(days, '2026-10-16')
+    expect([d.from, d.to]).toEqual(['2026-10-09', '2026-10-15'])
     expect(d.learnerDays).toBe(91)
     expect(d.learnerDaysChange).toBeCloseTo(0.3)
-    expect(d.peak).toEqual({ day: '2026-10-07', active: 19 })
+    expect(d.peak).toEqual({ day: '2026-10-14', active: 19 })
     expect(d.topWeeks.map((w) => w.week)).toEqual(['4', '5'])
     expect(d.statusShare.behind).toBeCloseTo(0.25)
     expect(d.installedShare).toBeCloseTo(0.25)
   })
 
-  it('reads the same week when run later in the week, or on the Sunday after', () => {
-    expect(weeklyDigest(days, '2026-10-14').from).toBe('2026-10-05')
-    expect(weeklyDigest(days, '2026-10-18').to).toBe('2026-10-11')
+  it('reads the same week when run later, up to the Thursday after', () => {
+    expect(weeklyDigest(days, '2026-10-19').from).toBe('2026-10-09')
+    expect(weeklyDigest(days, '2026-10-22').to).toBe('2026-10-15')
   })
 
-  it('is posted once a week: on the Monday, or on the first run after it', () => {
-    const monday = weeklyDigest(days, '2026-10-12')
-    expect(digestDue(null, monday)).toBe(true)
-    expect(digestDue('2026-09-28', monday)).toBe(true)
-    // Monday's run failed: Tuesday's still owes the same week.
-    expect(digestDue('2026-09-28', weeklyDigest(days, '2026-10-13'))).toBe(true)
-    expect(digestDue('2026-10-05', weeklyDigest(days, '2026-10-13'))).toBe(false)
-    expect(digestDue('2026-10-05', monday, true)).toBe(true)
+  it('posts the week just ended from the run at midnight in West Africa, 23:03 UTC on the Thursday', () => {
+    const friday = weeklyDigest(days, todayWAT(new Date('2026-10-15T23:03:00Z')))
+    expect([friday.from, friday.to, friday.asOf]).toEqual(['2026-10-09', '2026-10-15', '2026-10-15'])
+    // Before midnight there it is still Thursday, and that week isn't over.
+    expect(weeklyDigest(days, todayWAT(new Date('2026-10-15T22:59:00Z'))).from).toBe('2026-10-02')
+    // GoatCounter's Thursday, an hour short, is the week's last day: none of the week is left out.
+    expect(friday.visits).toBe(350)
+  })
+
+  it('is posted once a week: on the Friday, or on the first run after it', () => {
+    const friday = weeklyDigest(days, '2026-10-16')
+    expect(digestDue(null, friday)).toBe(true)
+    expect(digestDue('2026-10-02', friday)).toBe(true)
+    // The midnight run failed or never came: the morning's, or Saturday's, still owes the same week.
+    expect(digestDue('2026-10-02', weeklyDigest(days, '2026-10-17'))).toBe(true)
+    expect(digestDue('2026-10-09', weeklyDigest(days, '2026-10-16'))).toBe(false)
+    expect(digestDue('2026-10-09', weeklyDigest(days, '2026-10-17'))).toBe(false)
+    expect(digestDue('2026-10-09', friday, true)).toBe(true)
+  })
+
+  it('posts nothing early after the last Monday digest, and the first Friday one on time', () => {
+    // The last Monday digest was the week of Monday 5 Oct. Until Friday 16 Oct,
+    // the last full Friday-to-Thursday week began on 2 Oct, before it: nothing to post.
+    for (const today of ['2026-10-13', '2026-10-14', '2026-10-15']) expect(digestDue('2026-10-05', weeklyDigest(days, today))).toBe(false)
+    expect(digestDue('2026-10-05', weeklyDigest(days, '2026-10-16'))).toBe(true)
   })
 
   it('gives exact counts, never averages: learners are people', () => {
     // 20 learner-days over the week: said as 20, not as 2.9 a day.
     const quiet = {}
-    for (const d of dayRange('2026-09-28', '2026-10-04')) quiet[d] = { 'week-1-on-track': d === '2026-09-28' ? 8 : 2 }
-    const msg = digestMessage(weeklyDigest(quiet, '2026-10-05'))
+    for (const d of dayRange('2026-10-02', '2026-10-08')) quiet[d] = { 'week-1-on-track': d === '2026-10-02' ? 8 : 2 }
+    const msg = digestMessage(weeklyDigest(quiet, '2026-10-09'))
     const all = JSON.stringify(msg.blocks)
     expect(msg.text).toContain('20 learner-days')
     expect(all).toContain('*20* learner-days this week: each learner counted once for each day they opened Pace')
@@ -323,88 +364,87 @@ describe('the Monday digest', () => {
   })
 
   it('names no busiest day that others tie with, and says 1 learner, not 1 learners', () => {
-    // 10–16 Aug 2026 as it was: 2 learners on Monday, Tuesday and Wednesday, 1 on the rest.
+    // 2 learners on Friday, Saturday and Sunday, 1 on the rest.
     const tied = {}
-    dayRange('2026-08-10', '2026-08-16').forEach((d, i) => (tied[d] = { 'week-1': i < 3 ? 2 : 1 }))
-    const d = weeklyDigest(tied, '2026-08-17')
+    dayRange('2026-08-14', '2026-08-20').forEach((d, i) => (tied[d] = { 'week-1': i < 3 ? 2 : 1 }))
+    const d = weeklyDigest(tied, '2026-08-21')
     expect(d.peakDays).toBe(3)
     expect(JSON.stringify(digestMessage(d).blocks)).toContain('Busiest day*\\n2 learners, on 3 days')
     const one = { '2026-08-12': { 'week-1': 1 } }
-    expect(JSON.stringify(digestMessage(weeklyDigest(one, '2026-08-17')).blocks)).toContain('Busiest day*\\nWednesday 12 Aug, 1 learner"')
+    expect(JSON.stringify(digestMessage(weeklyDigest(one, '2026-08-14')).blocks)).toContain('Busiest day*\\nWednesday 12 Aug, 1 learner"')
   })
 
   it('leads with every visit since counting began, to yesterday, and the week’s share', () => {
-    // Counting began on 28 Sept: 210 visits that week, 350 in the digest's week.
-    const d = weeklyDigest(days, '2026-10-12')
-    expect(d.since).toBe('2026-09-28')
+    // Counting began on 2 Oct: 210 visits that week, 350 in the digest's week.
+    const d = weeklyDigest(days, '2026-10-16')
+    expect(d.since).toBe('2026-10-02')
     expect(d.visitsTotal).toBe(210 + 350)
-    // Monday so far, collected by Monday's morning run, is not in its total: it isn't over.
-    expect(weeklyDigest({ ...days, '2026-10-12': { '/': 40 } }, '2026-10-12').visitsTotal).toBe(560)
+    // Friday so far, collected by Friday's morning run, is not in its total: it isn't over.
+    expect(weeklyDigest({ ...days, '2026-10-16': { '/': 40 } }, '2026-10-16').visitsTotal).toBe(560)
     const lines = digestMessage(d).blocks[1].text.text.split('\n')
-    expect(lines.slice(0, 2)).toEqual(['*560* visits on GoatCounter so far, since counting began on 28 Sept 2026', '*350* visits this week (↑ 67% on the week before)'])
+    expect(lines.slice(0, 2)).toEqual(['*560* visits on GoatCounter so far, since counting began on 2 Oct 2026', '*350* visits this week (↑ 67% on the week before)'])
     // Counting began weeks before the two compared: the total is every day, not those two weeks.
-    const earlier = weeklyDigest({ ...days, '2026-09-14': { '/': 5 } }, '2026-10-12')
+    const earlier = weeklyDigest({ ...days, '2026-09-14': { '/': 5 } }, '2026-10-16')
     expect([earlier.since, earlier.visitsTotal]).toEqual(['2026-09-14', 565])
     expect(digestMessage(earlier).blocks[1].text.text.split('\n')[0]).toBe('*565* visits on GoatCounter so far, since counting began on 14 Sept 2026')
   })
 
-  it('counts every day so far when posted after the Monday, or again by hand', () => {
-    // Run by hand on Sunday 11 Oct: the week is the last full one, 28 Sept – 4 Oct,
-    // but the total runs to Saturday 10 Oct, every visit so far.
-    const d = weeklyDigest(days, '2026-10-11')
-    expect([d.from, d.to, d.visits]).toEqual(['2026-09-28', '2026-10-04', 210])
-    expect([d.asOf, d.through, d.visitsTotal]).toEqual(['2026-10-10', '2026-10-10', 210 + 350 - 48])
+  it('counts every day so far when posted after the Friday, or again by hand', () => {
+    // Run by hand on Wednesday 14 Oct: the week is the last full one, 2 – 8 Oct,
+    // but the total runs to Tuesday 13 Oct, every visit so far.
+    const d = weeklyDigest(days, '2026-10-14')
+    expect([d.from, d.to, d.visits]).toEqual(['2026-10-02', '2026-10-08', 210])
+    expect([d.asOf, d.through, d.visitsTotal]).toEqual(['2026-10-13', '2026-10-13', 210 + 350 - 48 - 62])
     const msg = digestMessage(d)
-    expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*512* visits on GoatCounter so far, since counting began on 28 Sept 2026')
-    expect(JSON.stringify(msg)).toContain('counted from 28 Sept 2026 to Saturday 10 Oct')
+    expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*450* visits on GoatCounter so far, since counting began on 2 Oct 2026')
+    expect(JSON.stringify(msg)).toContain('counted from 2 Oct 2026 to Tuesday 13 Oct')
   })
 
   it('says where the total stops, not "so far", when collecting stopped before the week ended', () => {
-    // Nothing stored after Thursday 8 Oct: the key removed, say, so the job collects nothing.
-    const stopped = Object.fromEntries(Object.entries(days).filter(([day]) => day <= '2026-10-08'))
-    const msg = digestMessage(weeklyDigest(stopped, '2026-10-12'))
+    // Nothing stored after Monday 12 Oct: the key removed, say, so the job collects nothing.
+    const stopped = Object.fromEntries(Object.entries(days).filter(([day]) => day <= '2026-10-12'))
+    const msg = digestMessage(weeklyDigest(stopped, '2026-10-16'))
     const all = JSON.stringify(msg)
     expect(all).not.toContain('so far')
-    expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*416* visits on GoatCounter to 8 Oct 2026, since counting began on 28 Sept 2026')
-    expect(msg.text).toContain('416 visits to 8 Oct 2026; this week')
-    expect(all).toContain('counted from 28 Sept 2026 to Thursday 8 Oct')
+    expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*402* visits on GoatCounter to 12 Oct 2026, since counting began on 2 Oct 2026')
+    expect(msg.text).toContain('402 visits to 12 Oct 2026; this week')
+    expect(all).toContain('counted from 2 Oct 2026 to Monday 12 Oct')
   })
 
-  it('says "N out of M visits shown" as GoatCounter does when it lists only some paths', () => {
-    // 12 paths, 1 to 12 visits each: GoatCounter's top 10 hold 12 + 11 + … + 3.
-    const many = { '2026-10-05': Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`week-${i + 1}`, i + 1])) }
-    // A week earlier, 10 app opens: 13 paths in all, so the line is every day's (82 of 88), not the week's (75 of 78).
-    // The stored days run on to the week's Sunday, as the morning job's always do.
-    const d = weeklyDigest({ ...many, '2026-09-28': { '/': 10 }, '2026-10-11': {} }, '2026-10-12')
-    expect([d.visitsTotalShown, d.visitsTotal, d.visits]).toEqual([82, 88, 78])
-    expect(digestMessage(d).blocks[1].text.text.split('\n').slice(0, 3)).toEqual([
-      '*88* visits on GoatCounter so far, since counting began on 28 Sept 2026',
-      '82 out of 88 visits shown, as GoatCounter lists its top 10 paths',
+  it('gives the total and the week, with no "N out of M visits shown" line', () => {
+    // 13 paths, more than GoatCounter lists: the digest still says only the total, then the week.
+    const many = { '2026-10-09': Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`week-${i + 1}`, i + 1])) }
+    // The stored days run on to the week's Thursday, as the Friday run's always do.
+    const d = weeklyDigest({ ...many, '2026-10-02': { '/': 10 }, '2026-10-15': {} }, '2026-10-16')
+    const lines = digestMessage(d).blocks[1].text.text.split('\n')
+    expect(lines.slice(0, 2)).toEqual([
+      '*88* visits on GoatCounter so far, since counting began on 2 Oct 2026',
       '*78* visits this week (↑ 680% on the week before)',
     ])
+    expect(JSON.stringify(digestMessage(d))).not.toContain('visits shown')
   })
 
   it('says so when nothing was counted', () => {
-    const d = weeklyDigest({}, '2026-10-12')
+    const d = weeklyDigest({}, '2026-10-16')
     expect(d.hasData).toBe(false)
     const msg = digestMessage(d)
     expect(msg.text).toContain('no learner activity')
     expect(JSON.stringify(msg.blocks)).not.toContain('so far')
     // A quiet week still carries the running total.
-    const quiet = digestMessage(weeklyDigest({ '2026-09-30': { '/': 7, 'week-1': 2 }, '2026-10-11': {} }, '2026-10-12'))
+    const quiet = digestMessage(weeklyDigest({ '2026-09-30': { '/': 7, 'week-1': 2 }, '2026-10-15': {} }, '2026-10-16'))
     expect(quiet.blocks[1].text.text).toContain('*9* visits on GoatCounter so far, since counting began on 30 Sept 2026')
   })
 
   it('reads as a Slack message with the numbers, the comparison and the dashboard link', () => {
-    const msg = digestMessage(weeklyDigest(days, '2026-10-12'))
-    expect(msg.text).toBe('ALX Pace · Data Analytics · week of 5 Oct – 11 Oct 2026: 560 visits so far; this week 350 visits, 91 learner-days')
+    const msg = digestMessage(weeklyDigest(days, '2026-10-16'))
+    expect(msg.text).toBe('ALX Pace · Data Analytics · week of 9 Oct – 15 Oct 2026: 560 visits so far; this week 350 visits, 91 learner-days')
     const all = JSON.stringify(msg.blocks)
     // Visits lead: GoatCounter's own number, then learners.
-    expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*560* visits on GoatCounter so far, since counting began on 28 Sept 2026')
+    expect(msg.blocks[1].text.text.split('\n')[0]).toBe('*560* visits on GoatCounter so far, since counting began on 2 Oct 2026')
     expect(all).toContain('↑ 30% on the week before')
     expect(all).toContain('On track 63 (75%) · Behind 21 (25%) · Ahead 0 (0%)')
     expect(all).toContain('Week 4: 63 · Week 5: 28')
-    expect(all).toContain('Wednesday 7 Oct, 19 learners')
+    expect(all).toContain('Wednesday 14 Oct, 19 learners')
     // Unique learners as a range, the week's and since counting began, and why there's no exact number.
     const lines = msg.blocks[1].text.text.split('\n')
     expect(lines).toContain('*19 to 91* unique learners this week')
@@ -412,19 +452,21 @@ describe('the Monday digest', () => {
       '*19 to 161* unique learners so far, since counting began: at least the most counted on any one day, at most one per learner-day. No exact count is possible, as nothing identifies a learner from one day to the next.',
     )
     expect(all).toContain('App opens*\\n84 · 21 from the installed app (25%)')
-    // The button opens the dashboard on the digest's own week.
-    expect(msg.blocks.find((b) => b.type === 'actions').elements[0].url).toBe(`${DASHBOARD_URL}?from=2026-10-05&to=2026-10-11`)
+    // The link opens the dashboard on the digest's own week.
+    expect(all).toContain(`*<${DASHBOARD_URL}?from=2026-10-09&amp;to=2026-10-15|Open the dashboard>* on this week`)
+    // A link, not a button: Slack sends a button's click to the app, and a webhook can't answer it.
+    expect(msg.blocks.some((b) => b.type === 'actions' || b.accessory)).toBe(false)
   })
 
   it('takes the floor since counting began from every day, not the week', () => {
     // 25 learners on a day the week before: the total's floor, while the week keeps its own 19.
-    const lines = digestMessage(weeklyDigest({ ...days, '2026-09-30': { 'week-3': 25 } }, '2026-10-12')).blocks[1].text.text.split('\n')
+    const lines = digestMessage(weeklyDigest({ ...days, '2026-10-04': { 'week-3': 25 } }, '2026-10-16')).blocks[1].text.text.split('\n')
     expect(lines).toContain('*19 to 91* unique learners this week')
     expect(lines.find((l) => l.includes('since counting began:'))).toMatch(/^\*25 to 176\* unique learners so far/)
   })
 
   it('says one unique learner, and no range, when every learner counted was on one day', () => {
-    const lines = digestMessage(weeklyDigest({ '2026-08-12': { 'week-1': 1 }, '2026-08-16': {} }, '2026-08-17')).blocks[1].text.text.split('\n')
+    const lines = digestMessage(weeklyDigest({ '2026-08-12': { 'week-1': 1 }, '2026-08-13': {} }, '2026-08-14')).blocks[1].text.text.split('\n')
     expect(lines).toContain('*1* unique learner this week')
     expect(lines).toContain('*1* unique learner so far, since counting began: all counted on one day.')
     expect(lines.join(' ')).not.toContain('No exact count')
@@ -459,7 +501,9 @@ describe('fetching from GoatCounter', () => {
     expect(calls[0].url.origin + calls[0].url.pathname).toBe('https://alxpace.goatcounter.com/api/v0/stats/hits')
     expect(Object.fromEntries(calls[0].url.searchParams)).toEqual({
       start: '2026-10-01',
-      end: '2026-10-10',
+      // To the day's last second: a bare date is its midnight to GoatCounter,
+      // which would leave the last day only its first hour.
+      end: '2026-10-10T23:59:59Z',
       group: 'day',
       limit: '100',
     })

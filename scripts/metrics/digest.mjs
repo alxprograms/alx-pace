@@ -1,30 +1,34 @@
 #!/usr/bin/env node
 /**
- * Posts the weekly digest to Slack: last Monday to Sunday's active learners,
- * pace mix and busiest weeks, compared with the week before.
+ * Posts the weekly digest to Slack: last Friday to Thursday's visits,
+ * learners, pace mix and busiest weeks, compared with the week before.
  *
  *   SLACK_WEBHOOK_URL=… node scripts/metrics/digest.mjs --dir metrics-data
  *   node scripts/metrics/digest.mjs --dir metrics-data --dry-run   # print, don't post
- *   … --today 2026-10-12                                           # as if run that day
+ *   … --today 2026-10-16                                           # as if run that day
+ *   … --now 2026-10-15T23:03:00Z                                   # as if run then
  *   … --force                                                      # post even if posted
  *
- * Run every morning after the collector, it posts each week once: on the
- * Monday, or on the first run after it when that one failed or never ran.
- * The last week posted is kept in <dir>/digest.json, which the workflow
- * commits beside the numbers.
+ * Its day is West Africa's (model.todayWAT), so the run at 00:03 there on a
+ * Friday (23:03 UTC on the Thursday) posts the week that has just ended. Run
+ * again every morning after the collector, it posts each week once: on the
+ * Friday, or on the first run after it when that one failed, was skipped or
+ * ran late. The last week posted is kept in <dir>/digest.json, which the
+ * workflow commits beside the numbers.
  *
  * With no webhook, or no data collected yet, it says so and exits 0.
  */
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { METRICS_FILE } from '../../src/metrics/config.js'
-import { digestDue, readFile as readStored, todayUTC, weeklyDigest } from '../../src/metrics/model.js'
+import { digestDue, readFile as readStored, todayWAT, weeklyDigest } from '../../src/metrics/model.js'
 import { digestMessage } from '../../src/metrics/slack.js'
 
 const args = process.argv.slice(2)
 const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback)
 const dir = opt('--dir', 'metrics-data')
-const today = opt('--today', todayUTC())
+// --now: as if run at that moment (an ISO time), for checking the schedule.
+const today = opt('--today', todayWAT(args.includes('--now') ? new Date(opt('--now')) : new Date()))
 const dryRun = args.includes('--dry-run')
 const force = args.includes('--force') || process.env.FORCE === 'true'
 const webhook = process.env.SLACK_WEBHOOK_URL
@@ -39,7 +43,7 @@ if (!stored) {
 const digest = weeklyDigest(stored.days, today)
 const posted = await readFile(postedPath, 'utf8').then((t) => JSON.parse(t).lastWeek).catch(() => null)
 if (!dryRun && !digestDue(posted, digest, force)) {
-  console.log(`The digest for the week of ${digest.from} was already posted.`)
+  console.log(`Nothing to post: the last week posted began ${posted}, and the last full week, from ${digest.from}, is no later.`)
   process.exit(0)
 }
 

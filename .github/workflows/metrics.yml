@@ -3,9 +3,10 @@ name: Learner metrics
 # Reads the app's anonymous GoatCounter counts back through its API every
 # morning, keeps them in metrics.json on the `metrics` branch (never `main`,
 # which would redeploy the app and tag a rollback point daily), and posts
-# last week's digest to Slack: on Mondays, or on the first run after a
-# Monday whose run failed. The dashboard at
-# https://alxprograms.github.io/alx-pace/metrics/ reads the same file.
+# the week's digest to Slack: just after midnight on Fridays, West Africa
+# Time, or on the first run after it when that one failed or was skipped.
+# The dashboard at https://alxprograms.github.io/alx-pace/metrics/ reads the
+# same file.
 #
 # Secrets, added by the repository owner (Settings → Secrets → Actions):
 #   GOATCOUNTER_API_KEY  a GoatCounter API key with "Read statistics" only
@@ -16,12 +17,17 @@ name: Learner metrics
 
 on:
   schedule:
-    # 05:23 UTC = 06:23 West Africa Time: yesterday is complete by then.
+    # 05:23 UTC = 06:23 West Africa Time (no DST): yesterday is complete by then.
     - cron: '23 5 * * *'
+    # Thursdays 23:03 UTC = Fridays 00:03 West Africa Time: collects the
+    # Thursday just ended there and posts the Friday-to-Thursday digest.
+    # GitHub can start a scheduled run late, or skip it when busy; the next
+    # morning's run then posts it.
+    - cron: '3 23 * * 4'
   workflow_dispatch:
     inputs:
       digest:
-        description: Post last week's Slack digest again, even if it was posted
+        description: Post the last full week's Slack digest again
         type: boolean
         default: false
 
@@ -58,13 +64,13 @@ jobs:
             git -C metrics-data rm -rf --quiet .
           fi
 
-      - name: Collect yesterday and the days before from GoatCounter
+      - name: Collect from GoatCounter, today so far included
         id: collect
         env:
           GOATCOUNTER_API_KEY: ${{ secrets.GOATCOUNTER_API_KEY }}
         run: node scripts/metrics/collect.mjs --dir metrics-data
 
-      # Before the digest, so its "Open the dashboard" button finds the week it
+      # Before the digest, so its "Open the dashboard" link finds the week it
       # links already published; and whatever the digest does, the numbers keep.
       - name: Commit the numbers to the metrics branch
         if: always() && steps.worktree.outcome == 'success'
@@ -84,10 +90,11 @@ jobs:
               commit --quiet -m "Learner metrics to $(date -u +%F)"
           git push --quiet origin HEAD:refs/heads/metrics
 
-      # Every day: digest.mjs posts a week only once (it keeps the last week
-      # posted in digest.json), so a Monday that failed is caught up the next
-      # morning. Never on numbers a failed collection left half-done.
-      - name: Post last week's digest to Slack, once
+      # Every run: digest.mjs posts a week only once (it keeps the last week
+      # posted in digest.json), so a Friday run that failed or never came is
+      # caught up by the next morning's. Never on numbers a failed collection
+      # left half-done.
+      - name: Post the week's digest to Slack, once
         if: steps.collect.outcome == 'success'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
