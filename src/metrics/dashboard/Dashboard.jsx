@@ -6,7 +6,7 @@ import portrait4 from '../../assets/alx/banner-img4.webp'
 import portrait5 from '../../assets/alx/banner-img5.webp'
 import logo from '../../assets/alx/header-logo.svg'
 import { APP_URL, DATA_URL } from '../config.js'
-import { addDays, byWeek, change, mostBehindWeek, readFile, series, shownVisits, summarize, visitKinds, weekdayPattern, STATUSES } from '../model.js'
+import { addDays, byWeek, change, lastCompleteDay, mostBehindWeek, readFile, series, shownVisits, summarize, visitKinds, weekdayPattern, STATUSES } from '../model.js'
 import { DailyActiveChart, Legend, MeterDial, PaceDial, PaceMixChart, Sparkline, WeeksChart } from './charts.jsx'
 import { fmtChange, fmtDay, fmtInt, fmtPct } from './format.js'
 import { LIME, PACE, PACE_ORDER } from './palette.js'
@@ -23,8 +23,8 @@ import { chartWindow, pickDate, resolveRange, searchForSelection, selectionFromS
   One selection scopes everything on the page: a preset (the last 7, 30 or 90
   days, or all) or days picked by date, one day included (range.js). Every
   figure is compared with the same length of time just before it, once that
-  is all on record. Days run to the last complete one: the morning's file
-  also holds today so far, which would read as a drop.
+  is all on record. Days run to the last complete one (model.lastCompleteDay):
+  the morning's file also holds today so far, which would read as a drop.
 
   Visits lead the page: GoatCounter's own count, the number its dashboard
   shows, with what it is written beside it.
@@ -81,12 +81,6 @@ function useMetrics() {
     }
   }, [])
   return state
-}
-
-/** The last day whose counts are complete: the day before the file was written, at the latest. */
-function lastCompleteDay(file) {
-  const written = file.updatedAt?.slice(0, 10)
-  return written && file.lastDay >= written ? addDays(written, -1) : file.lastDay
 }
 
 /**

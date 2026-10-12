@@ -1,5 +1,5 @@
 /**
- * The Monday Slack digest, as a Slack incoming-webhook payload (Block Kit).
+ * The Friday Slack digest, as a Slack incoming-webhook payload (Block Kit).
  *
  * Plain numbers and words: Slack draws no charts from a webhook, so the link
  * at the end opens the dashboard for those. `text` is the notification line

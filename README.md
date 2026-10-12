@@ -151,7 +151,7 @@ public, like the repo.
 **How it stays current, with nobody updating it:**
 
 ```
-GoatCounter ──API──▶ .github/workflows/metrics.yml (daily, 05:23 UTC)
+GoatCounter ──API──▶ .github/workflows/metrics.yml (daily 05:23 UTC, and Fridays 00:03 WAT)
                        ├─ scripts/metrics/collect.mjs → metrics.json on the `metrics` branch
                        └─ scripts/metrics/digest.mjs → Slack, once a week (digest.json)
 metrics.json ──raw.githubusercontent.com──▶ /metrics/ (the dashboard page)
@@ -162,13 +162,20 @@ The numbers live on their own `metrics` branch, never `main`: a commit to
 the real ones. The dashboard reads the file straight from GitHub, so new
 numbers show without a deploy.
 
-The digest covers last Monday to Sunday and goes out on the Monday, after
-that morning's numbers are pushed, so its *Open the dashboard* link finds
+The digest covers Friday to Thursday and goes out just after midnight on the
+Friday, West Africa Time (00:03 WAT, which is 23:03 UTC on the Thursday),
+after that run's numbers are pushed, so its *Open the dashboard* link finds
 its week. It leads with every visit since counting began on 20 July, up to
 the day before it posts (GoatCounter's running total), then the week's own
 visits. The link is a plain link, not a button: Slack sends a button's click
-to the app, and a webhook has nothing to answer it with. If that run fails, or GitHub skips it, the next morning's run posts
+to the app, and a webhook has nothing to answer it with. GitHub can start a
+scheduled run late, or skip it when busy; then the next morning's run posts
 it instead: the last week posted is kept in `digest.json` beside the numbers.
+
+GoatCounter's days are UTC's, so its Thursday runs on to 01:00 WAT. The
+digest counts the week to midnight WAT; the hour after comes in with the
+next morning's numbers, so the dashboard's Thursday can end up a few visits
+above the digest's.
 
 The dashboard is its own build (`vite.metrics.config.js`), run by `npm run
 build` after the app's, into `dist/metrics/`. Built apart, it can't change a
@@ -413,7 +420,7 @@ src/
 │                            # WeekAccordion, CountdownState, GraduationState,
 │                            # StartDatePrompt, Footer
 ├── metrics/                 # the learner dashboard and the job that feeds it
-│   ├── model.js             #   counts → days → summaries, the Monday digest (pure)
+│   ├── model.js             #   counts → days → summaries, the Friday digest (pure)
 │   ├── goatcounter.js       #   GoatCounter API client (paging, rate limits)
 │   ├── slack.js             #   the digest as a Slack message
 │   └── dashboard/           #   the /metrics/ page (its own entry, styles and charts)

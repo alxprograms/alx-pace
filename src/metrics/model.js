@@ -35,6 +35,14 @@ export const addDays = (day, n) => fromTime(toTime(day) + n * DAY_MS)
 export const daysBetween = (from, to) => Math.round((toTime(to) - toTime(from)) / DAY_MS)
 export const todayUTC = (now = new Date()) => now.toISOString().slice(0, 10)
 
+/**
+ * The calendar day in West Africa at `now`: the team's clock, UTC+1 all year
+ * (no daylight saving), so a day there ends at 23:00 UTC. GoatCounter's days
+ * are UTC's, an hour behind: the last hour of one of its days is the first
+ * hour of the next day in West Africa.
+ */
+export const todayWAT = (now = new Date()) => todayUTC(new Date(now.getTime() + 3_600_000))
+
 /** Every day from `from` to `to`, both included. */
 export function dayRange(from, to) {
   const out = []
@@ -42,10 +50,10 @@ export function dayRange(from, to) {
   return out
 }
 
-/** The Monday of the ISO week holding `day`. */
-export function mondayOf(day) {
-  const weekday = new Date(toTime(day)).getUTCDay() // 0 = Sunday
-  return addDays(day, -((weekday + 6) % 7))
+/** The last Thursday before `day`: the day before a Friday, a week before a Thursday. */
+export function thursdayBefore(day) {
+  const weekday = new Date(toTime(day)).getUTCDay() // 0 = Sunday, 4 = Thursday
+  return addDays(day, -(((weekday + 2) % 7) + 1))
 }
 
 /* ---------- GoatCounter → stored days ---------- */
@@ -139,6 +147,19 @@ export function readFile(file, { until } = {}) {
     lastDay: sorted.at(-1) ?? null,
     days,
   }
+}
+
+/**
+ * The last day of a stored file whose counts are complete: at the latest,
+ * the day before the file was written, by West Africa's clock (todayWAT).
+ * Each morning's file also holds today so far, which would read as a drop.
+ * The Friday digest's run, just after midnight there (23:03 UTC), counts the
+ * Thursday it reports to its end in West Africa; GoatCounter's Thursday runs
+ * an hour on, and the next morning's run adds that hour.
+ */
+export function lastCompleteDay(file) {
+  const written = file.updatedAt ? todayWAT(new Date(file.updatedAt)) : null
+  return written && file.lastDay >= written ? addDays(written, -1) : file.lastDay
 }
 
 /* ---------- stored days → what the dashboard and digest say ---------- */
@@ -324,13 +345,13 @@ export function visitKinds(paths) {
 export const change = (after, before) => (before > 0 ? (after - before) / before : null)
 
 /**
- * The Monday digest: the last full Monday-to-Sunday week before `today`, and
- * the week before it to compare with. `program` as in readDay.
+ * The Friday digest: the last full Friday-to-Thursday week before `today`,
+ * the day in West Africa it is posted (todayWAT), and the week before it to
+ * compare with. `program` as in readDay.
  */
 export function weeklyDigest(days, today, program = 'da') {
-  const thisMonday = mondayOf(today)
-  const from = addDays(thisMonday, -7)
-  const to = addDays(thisMonday, -1)
+  const to = thursdayBefore(today)
+  const from = addDays(to, -6)
   const rows = series(days, from, to, program)
   const week = summarize(rows)
   const prior = summarize(series(days, addDays(from, -7), addDays(from, -1), program))
@@ -340,7 +361,7 @@ export function weeklyDigest(days, today, program = 'da') {
     .map(([w, learnerDays]) => ({ week: w, learnerDays }))
   // Every visit since counting began, to the last complete day (yesterday):
   // the running total, which GoatCounter's own page shows over all its days.
-  // On a Monday that is the week's Sunday; a digest posted later, or posted
+  // On a Friday that is the week's Thursday; a digest posted later, or posted
   // again, still counts every day so far. `through` is the last day on record:
   // before `asOf` only when collecting has stopped, and then the total isn't
   // "so far".
@@ -378,7 +399,7 @@ export function weeklyDigest(days, today, program = 'da') {
 
 /**
  * Whether the weekly digest should be posted: its week is later than the last
- * one posted (`posted`, that week's Monday, or null for none yet), or it is
+ * one posted (`posted`, that week's first day, or null for none yet), or it is
  * asked for again.
  */
 export const digestDue = (posted, digest, force = false) => force || !posted || posted < digest.from
