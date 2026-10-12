@@ -501,7 +501,9 @@ describe('fetching from GoatCounter', () => {
     expect(calls[0].url.origin + calls[0].url.pathname).toBe('https://alxpace.goatcounter.com/api/v0/stats/hits')
     expect(Object.fromEntries(calls[0].url.searchParams)).toEqual({
       start: '2026-10-01',
-      end: '2026-10-10',
+      // To the day's last second: a bare date is its midnight to GoatCounter,
+      // which would leave the last day only its first hour.
+      end: '2026-10-10T23:59:59Z',
       group: 'day',
       limit: '100',
     })

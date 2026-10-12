@@ -1,8 +1,9 @@
 /**
  * Where the learner-usage numbers come from and where they are kept.
  *
- * The app sends anonymous GoatCounter events (src/lib/analytics.js). Once a
- * day, .github/workflows/metrics.yml reads them back through GoatCounter's API
+ * The app sends anonymous GoatCounter events (src/lib/analytics.js). Every
+ * morning, and just after midnight West Africa Time on Fridays,
+ * .github/workflows/metrics.yml reads them back through GoatCounter's API
  * (scripts/metrics/collect.mjs) and commits one JSON file to the `metrics`
  * branch, never to `main`: a daily commit there would redeploy the app and tag
  * a rollback point every morning. The dashboard (metrics/index.html, deployed

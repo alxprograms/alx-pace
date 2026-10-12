@@ -25,7 +25,11 @@ export class GoatCounterError extends Error {}
 
 /**
  * Every path's daily counts from `from` to `to` (YYYY-MM-DD, both included),
- * as the raw `hits` array of all pages.
+ * as the raw `hits` array of all pages. `to` is asked for to its last second:
+ * GoatCounter reads a bare date as that day's midnight and keeps the hours up
+ * to it, so `end=<today>` returned only today's first UTC hour, and the
+ * Friday digest's run (23:03 UTC) would have counted one hour of the Thursday
+ * it reports. With no `end` GoatCounter's own default is the end of today.
  */
 export async function fetchDailyHits({ site, token, from, to, fetchImpl = fetch, sleep = realSleep }) {
   if (!site || !token) throw new GoatCounterError('fetchDailyHits needs a site and an API token')
@@ -35,7 +39,7 @@ export async function fetchDailyHits({ site, token, from, to, fetchImpl = fetch,
   for (let page = 0; page < MAX_PAGES; page++) {
     const params = new URLSearchParams({
       start: from,
-      end: to,
+      end: `${to}T23:59:59Z`,
       group: 'day',
       limit: String(PAGE_SIZE),
     })

@@ -119,7 +119,7 @@ export default function Dashboard() {
   const [selection, select, moved] = useSelection()
   const bounds = metrics.status === 'ready' ? { first: metrics.file.firstDay, last: lastCompleteDay(metrics.file) } : null
   const view = bounds ? resolveRange(selection, bounds.first, bounds.last) : null
-  // Days asked for (a Slack button, a shared link) that haven't been collected yet.
+  // Days asked for (the Slack digest's link, a shared one) that haven't been collected yet.
   const askedPast = bounds && !selection.preset && selection.to > bounds.last ? selection.to : null
 
   return (
@@ -420,6 +420,9 @@ function Report({ file, view, bounds, onSelect, askedPast }) {
   const updated = file.updatedAt
     ? new Date(file.updatedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' })
     : null
+  // Collected before GoatCounter's (UTC) day ended: the Friday run, at 00:03
+  // West Africa Time, counts Thursday to then, and the morning adds the rest.
+  const lastCutShort = to === bounds.last && updated && file.updatedAt < `${addDays(to, 1)}T00:00:00Z`
 
   return (
     <>
@@ -491,8 +494,10 @@ function Report({ file, view, bounds, onSelect, askedPast }) {
             </p>
             <p>
               It is GoatCounter’s own count, the total at the top of its page, where “N out of M visits shown” means the visits on the{' '}
-              {GOATCOUNTER_LISTED} paths it lists out of them all. Counted to the end of {fmtDay(to, { day: 'numeric', month: 'short' })}
-              {to === bounds.last ? '; GoatCounter’s page also counts today so far.' : ', the same as GoatCounter shows for these dates.'}
+              {GOATCOUNTER_LISTED} paths it lists out of them all.{' '}
+              {lastCutShort
+                ? `Counted to ${updated} West Africa Time, when these numbers were collected; GoatCounter’s ${fmtDay(to, { day: 'numeric', month: 'short' })} runs on to 01:00 there, and the morning’s numbers add its last hour.`
+                : `Counted to the end of ${fmtDay(to, { day: 'numeric', month: 'short' })}${to === bounds.last ? '; GoatCounter’s page also counts today so far.' : ', the same as GoatCounter shows for these dates.'}`}
             </p>
           </div>
         </div>

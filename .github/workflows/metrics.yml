@@ -27,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       digest:
-        description: Post the last full week's Slack digest (Friday to Thursday) again, even if it was posted
+        description: Post the last full week's Slack digest again
         type: boolean
         default: false
 
@@ -64,7 +64,7 @@ jobs:
             git -C metrics-data rm -rf --quiet .
           fi
 
-      - name: Collect yesterday and the days before from GoatCounter
+      - name: Collect from GoatCounter, today so far included
         id: collect
         env:
           GOATCOUNTER_API_KEY: ${{ secrets.GOATCOUNTER_API_KEY }}

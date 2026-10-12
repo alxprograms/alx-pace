@@ -189,8 +189,9 @@ single file of the app's.
 2. In Slack, create an app with an **Incoming Webhook** for the channel the
    digest goes to. Add its URL as the secret `SLACK_WEBHOOK_URL`.
 3. *Actions → Learner metrics → Run workflow*. The first run collects every
-   day since 20 July and posts last week's digest. (Tick *Post last week's
-   Slack digest again* to repeat one already posted.)
+   day since 20 July and posts the last full week's digest, Friday to
+   Thursday. (Tick *Post the last full week's Slack digest again* to repeat
+   one already posted.)
 
 Without the key the job collects nothing and says so; without the webhook it
 prints the digest in the log. Neither turns the run red.

@@ -6,6 +6,7 @@
  *   SLACK_WEBHOOK_URL=… node scripts/metrics/digest.mjs --dir metrics-data
  *   node scripts/metrics/digest.mjs --dir metrics-data --dry-run   # print, don't post
  *   … --today 2026-10-16                                           # as if run that day
+ *   … --now 2026-10-15T23:03:00Z                                   # as if run then
  *   … --force                                                      # post even if posted
  *
  * Its day is West Africa's (model.todayWAT), so the run at 00:03 there on a
@@ -26,7 +27,8 @@ import { digestMessage } from '../../src/metrics/slack.js'
 const args = process.argv.slice(2)
 const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback)
 const dir = opt('--dir', 'metrics-data')
-const today = opt('--today', todayWAT())
+// --now: as if run at that moment (an ISO time), for checking the schedule.
+const today = opt('--today', todayWAT(args.includes('--now') ? new Date(opt('--now')) : new Date()))
 const dryRun = args.includes('--dry-run')
 const force = args.includes('--force') || process.env.FORCE === 'true'
 const webhook = process.env.SLACK_WEBHOOK_URL
@@ -41,7 +43,7 @@ if (!stored) {
 const digest = weeklyDigest(stored.days, today)
 const posted = await readFile(postedPath, 'utf8').then((t) => JSON.parse(t).lastWeek).catch(() => null)
 if (!dryRun && !digestDue(posted, digest, force)) {
-  console.log(`The digest for the week of ${digest.from} was already posted.`)
+  console.log(`Nothing to post: the last week posted began ${posted}, and the last full week, from ${digest.from}, is no later.`)
   process.exit(0)
 }
 

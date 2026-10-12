@@ -4,7 +4,7 @@ import { addDays, daysBetween, isDay } from '../model.js'
   What the dashboard is showing: a preset (the last 7, 30 or 90 days, or
   everything) or days picked by date, from and to (the same day for one day).
   It lives in the page's address, so a link opens the same view, and the
-  Slack digest's button opens its own week.
+  Slack digest's link opens its own week.
 */
 
 export const PRESETS = [7, 30, 90, 'all']

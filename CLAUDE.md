@@ -62,7 +62,8 @@ lose data.
   anything under `bridge/`, republish that branch and trigger its Pages build,
   or the old address keeps handing over stale payloads.
 - The `metrics` branch of `origin` holds data, not code: `metrics.json`, written
-  every morning by `.github/workflows/metrics.yml`. It shares no history with
+  every morning (and just after midnight WAT on Fridays) by
+  `.github/workflows/metrics.yml`. It shares no history with
   `main`; never merge it, rebase onto it or push to it by hand. Its commits
   don't deploy (deploys run on `main` only), and the dashboard reads the file
   from raw.githubusercontent.com, so new numbers need no deploy.
@@ -259,7 +260,12 @@ GoatCounter API → scripts/metrics/collect.mjs (metrics.yml, daily 05:23 UTC,
   by UTC the Friday run is still on Thursday, and would post the week
   before and hide that Thursday on the dashboard. GoatCounter's Thursday runs
   to 01:00 WAT, so the digest's Thursday is an hour short of the dashboard's
-  once the next morning's run adds it.
+  once the next morning's run adds it. `schedule.test.js` holds the cron and
+  the script's day together.
+- `goatcounter.js` asks for `end` as the last second of the last day, never a
+  bare date: GoatCounter reads a date as that day's midnight and keeps the
+  hours up to it, so the day the job runs came back with one hour, and the
+  Friday run would have posted Thursday nearly empty.
 - Secrets `GOATCOUNTER_API_KEY` (read-only stats key) and `SLACK_WEBHOOK_URL`
   are the owner's to add. Without them each step is a logged no-op, never red.
 - What the page shows lives in its address (`src/metrics/dashboard/range.js`):
