@@ -357,7 +357,6 @@ export function weeklyDigest(days, today, program = 'da') {
     through,
     asOf,
     visitsTotal: all.visits,
-    visitsTotalShown: shownVisits(all.paths),
     visits: week.visits,
     visitsChange: change(week.visits, prior.visits),
     learnerDays: week.learnerDays,

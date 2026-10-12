@@ -63,8 +63,6 @@ export function digestMessage(d) {
   // Every number is a count, never an average: learners are people.
   const headline = [
     total,
-    // GoatCounter's "N out of M visits shown": its top 10 paths, out of them all.
-    d.visitsTotalShown < d.visitsTotal && `${fmtInt(d.visitsTotalShown)} out of ${fmtInt(d.visitsTotal)} visits shown, as GoatCounter lists its top 10 paths`,
     `*${fmtInt(d.visits)}* visits this week (${signed(d.visitsChange)})`,
     `*${fmtInt(d.learnerDays)}* learner-days this week: each learner counted once for each day they opened Pace (${signed(d.learnerDaysChange)})`,
     `${between(d.unique)} ${uniqueNoun(d.unique)} this week`,
@@ -116,14 +114,14 @@ const STATUS_LINE = (counts, shares) =>
     .map(([k, label]) => `${label} ${fmtInt(counts[k])} (${pct(shares[k])})`)
     .join(' · ')
 
-/** The dashboard, opened on the digest's week. */
+/**
+ * The dashboard, opened on the digest's week. A link, not a button: Slack
+ * sends a click on any button, link buttons too, to the app to acknowledge,
+ * and a webhook has nothing to answer it, so Slack marks the button with a
+ * warning once clicked. A link opens with nothing to acknowledge.
+ */
 const link = (d) => ({
-  type: 'actions',
-  elements: [
-    {
-      type: 'button',
-      text: { type: 'plain_text', text: 'Open the dashboard' },
-      url: `${DASHBOARD_URL}?from=${d.from}&to=${d.to}`,
-    },
-  ],
+  type: 'section',
+  // "&" is a control character in Slack's text, so the address carries it as "&amp;".
+  text: { type: 'mrkdwn', text: `*<${DASHBOARD_URL}?from=${d.from}&amp;to=${d.to}|Open the dashboard>* on this week` },
 })

@@ -64,7 +64,7 @@ jobs:
           GOATCOUNTER_API_KEY: ${{ secrets.GOATCOUNTER_API_KEY }}
         run: node scripts/metrics/collect.mjs --dir metrics-data
 
-      # Before the digest, so its "Open the dashboard" button finds the week it
+      # Before the digest, so its "Open the dashboard" link finds the week it
       # links already published; and whatever the digest does, the numbers keep.
       - name: Commit the numbers to the metrics branch
         if: always() && steps.worktree.outcome == 'success'

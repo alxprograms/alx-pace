@@ -145,7 +145,7 @@ any one day, at most one per learner-day. Pick the last
 7, 30 or 90 days, everything, or any day or dates in the date boxes (or click
 a day's column); the choice stays in the address
 (`?from=2026-10-05&to=2026-10-11`, `?range=all`), so a link opens the same
-view, and the Slack digest's button opens its own week. The numbers are
+view, and the Slack digest's link opens its own week. The numbers are
 public, like the repo.
 
 **How it stays current, with nobody updating it:**
@@ -163,10 +163,11 @@ the real ones. The dashboard reads the file straight from GitHub, so new
 numbers show without a deploy.
 
 The digest covers last Monday to Sunday and goes out on the Monday, after
-that morning's numbers are pushed, so its *Open the dashboard* button finds
+that morning's numbers are pushed, so its *Open the dashboard* link finds
 its week. It leads with every visit since counting began on 20 July, up to
-the day before it posts (GoatCounter's running total, with its "N out of M
-visits shown"), then the week's own visits. If that run fails, or GitHub skips it, the next morning's run posts
+the day before it posts (GoatCounter's running total), then the week's own
+visits. The link is a plain link, not a button: Slack sends a button's click
+to the app, and a webhook has nothing to answer it with. If that run fails, or GitHub skips it, the next morning's run posts
 it instead: the last week posted is kept in `digest.json` beside the numbers.
 
 The dashboard is its own build (`vite.metrics.config.js`), run by `npm run

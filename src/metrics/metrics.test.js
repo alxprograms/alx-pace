@@ -370,18 +370,17 @@ describe('the Monday digest', () => {
     expect(all).toContain('counted from 28 Sept 2026 to Thursday 8 Oct')
   })
 
-  it('says "N out of M visits shown" as GoatCounter does when it lists only some paths', () => {
-    // 12 paths, 1 to 12 visits each: GoatCounter's top 10 hold 12 + 11 + … + 3.
+  it('gives the total and the week, with no "N out of M visits shown" line', () => {
+    // 13 paths, more than GoatCounter lists: the digest still says only the total, then the week.
     const many = { '2026-10-05': Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`week-${i + 1}`, i + 1])) }
-    // A week earlier, 10 app opens: 13 paths in all, so the line is every day's (82 of 88), not the week's (75 of 78).
     // The stored days run on to the week's Sunday, as the morning job's always do.
     const d = weeklyDigest({ ...many, '2026-09-28': { '/': 10 }, '2026-10-11': {} }, '2026-10-12')
-    expect([d.visitsTotalShown, d.visitsTotal, d.visits]).toEqual([82, 88, 78])
-    expect(digestMessage(d).blocks[1].text.text.split('\n').slice(0, 3)).toEqual([
+    const lines = digestMessage(d).blocks[1].text.text.split('\n')
+    expect(lines.slice(0, 2)).toEqual([
       '*88* visits on GoatCounter so far, since counting began on 28 Sept 2026',
-      '82 out of 88 visits shown, as GoatCounter lists its top 10 paths',
       '*78* visits this week (↑ 680% on the week before)',
     ])
+    expect(JSON.stringify(digestMessage(d))).not.toContain('visits shown')
   })
 
   it('says so when nothing was counted', () => {
@@ -412,8 +411,10 @@ describe('the Monday digest', () => {
       '*19 to 161* unique learners so far, since counting began: at least the most counted on any one day, at most one per learner-day. No exact count is possible, as nothing identifies a learner from one day to the next.',
     )
     expect(all).toContain('App opens*\\n84 · 21 from the installed app (25%)')
-    // The button opens the dashboard on the digest's own week.
-    expect(msg.blocks.find((b) => b.type === 'actions').elements[0].url).toBe(`${DASHBOARD_URL}?from=2026-10-05&to=2026-10-11`)
+    // The link opens the dashboard on the digest's own week.
+    expect(all).toContain(`*<${DASHBOARD_URL}?from=2026-10-05&amp;to=2026-10-11|Open the dashboard>* on this week`)
+    // A link, not a button: Slack sends a button's click to the app, and a webhook can't answer it.
+    expect(msg.blocks.some((b) => b.type === 'actions' || b.accessory)).toBe(false)
   })
 
   it('takes the floor since counting began from every day, not the week', () => {
