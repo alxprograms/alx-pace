@@ -1,9 +1,9 @@
 {
   "version": 1,
   "site": "alxpace",
-  "updatedAt": "2026-10-27T10:41:28.679Z",
+  "updatedAt": "2026-10-28T11:25:35.016Z",
   "firstDay": "2026-07-20",
-  "lastDay": "2026-10-27",
+  "lastDay": "2026-10-28",
   "days": {
     "2026-07-20": {"/":10,"connectivity-test":1,"open-browser":10,"status-behind":2,"status-on-track":1,"week-1":1,"week-2":1,"week-3":1},
     "2026-07-21": {"/":9,"open-browser":9,"status-ahead":1,"status-on-track":2,"week-1":3},
@@ -104,6 +104,7 @@
     "2026-10-24": {"/":22,"open-browser":14,"open-installed":9,"week-1-on-track":1,"week-14-behind":1,"week-2-behind":1,"week-2-on-track":2,"week-3-ahead":1,"week-3-behind":1,"week-4-behind":1,"week-8-behind":1},
     "2026-10-25": {"/":16,"open-browser":10,"open-installed":7,"status-ahead":1,"week-1-on-track":4,"week-10-ahead":1,"week-2-ahead":3,"week-2-behind":1,"week-3":1,"week-3-behind":1,"week-4-behind":3},
     "2026-10-26": {"/":22,"open-browser":14,"open-installed":8,"week-1-ahead":1,"week-1-on-track":2,"week-11-behind":1,"week-12-behind":1,"week-2-ahead":1,"week-2-behind":2,"week-2-on-track":1,"week-3-ahead":1,"week-3-behind":1,"week-4-on-track":1,"week-8-behind":1},
-    "2026-10-27": {"/":1,"open-browser":1,"week-1-ahead":2}
+    "2026-10-27": {"/":24,"open-browser":17,"open-installed":8,"week-1-ahead":3,"week-2-ahead":2,"week-2-behind":6,"week-3-on-track":2,"week-8-behind":1},
+    "2026-10-28": {}
   }
 }
